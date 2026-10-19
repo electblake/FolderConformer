@@ -4,13 +4,16 @@ import math
 import os
 import re
 import sys
+import subprocess
 from pathlib import Path
 
+import qt_themes
 from platformdirs import user_config_path
 from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QObject, Property, QProcess, QProcessEnvironment, QSettings, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette
+from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
+from PySide6.QtQuickControls2 import QQuickStyle
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
@@ -27,6 +30,7 @@ class Controller(QObject):
 
     def __init__(self, folder=None):
         super().__init__()
+        self.restart_requested = False
         self._updates = Updates(self)
         self._run_state = ""
         self._waiting = False
@@ -36,6 +40,7 @@ class Controller(QObject):
         self._config_folder = self.location_settings.value("configFolder", str(settings_path.parent), type=str)
         self.settings = QSettings(str(Path(self._config_folder) / "FolderConformer.ini"), QSettings.Format.IniFormat)
         self.settings.setFallbacksEnabled(False)
+        self._theme = self.settings.value("appearance/theme", "blender", type=str)
         self._folder = self.settings.value("folder", "", type=str)
         self._include_subdirectories = self.settings.value("includeSubdirectories", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
@@ -67,6 +72,7 @@ class Controller(QObject):
         return self._updates
 
     def save(self):
+        self.settings.setValue("appearance/theme", self._theme)
         self.settings.setValue("folder", self._folder)
         self.settings.setValue("includeSubdirectories", self._include_subdirectories)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
@@ -77,6 +83,26 @@ class Controller(QObject):
         self.settings.setValue("rules", json.dumps(self._rules))
         self.settings.sync()
         self.configurationChanged.emit()
+
+    @Slot()
+    def restart(self):
+        self.save()
+        self.location_settings.sync()
+        self.restart_requested = True
+        QGuiApplication.quit()
+
+    @Property("QStringList", constant=True)
+    def themes(self):
+        return ["", *sorted(qt_themes.get_themes())]
+
+    @Property(str, notify=configurationChanged)
+    def theme(self):
+        return self._theme
+
+    @theme.setter
+    def theme(self, value):
+        self._theme = value
+        self.save()
 
     @Property(str, notify=configurationChanged)
     def folder(self):
@@ -301,12 +327,27 @@ def main():
                 control=control)
         return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
+    if controller.theme:
+        QQuickStyle.setStyle("Fusion")
+        palette = QPalette()
+        qt_themes.update_palette(palette, qt_themes.get_themes()[controller.theme])
+        app.setPalette(palette)
     engine = QQmlApplicationEngine()
     engine.setInitialProperties({"controller": controller})
     engine.objectCreationFailed.connect(lambda: app.exit(1))
     engine.load(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "Main.qml")))
+    if controller.theme:
+        window = engine.rootObjects()[0]
+        for group in (QPalette.Active, QPalette.Inactive, QPalette.Disabled):
+            for role in QPalette.ColorRole:
+                if role in (QPalette.NoRole, QPalette.NColorRoles):
+                    continue
+                name = role.name[0].lower() + role.name[1:]
+                QQmlProperty.write(window, f"palette.{group.name.lower()}.{name}", palette.color(group, role))
     result = app.exec()
     window = engine.rootObjects()[0]
     if window.property("pending_installer") is not None:
         os.startfile(window.property("pending_installer"))
+    if controller.restart_requested:
+        subprocess.Popen([sys.executable, "-I", "-m", "folderconformer"])
     return result

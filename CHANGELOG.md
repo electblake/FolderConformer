@@ -9,12 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added File > Settings with Data and Appearance field groups and moved the configuration folder controls into Data.
+- Added a qt-themes dropdown persisted through QSettings and a Restart & Apply button to relaunch with the selected theme.
 - Added a right-aligned Copy Output button below the activity log to select and copy all output to the clipboard.
 - Added File > Select Folder.. to set the input folder through the existing picker, followed by a divider and Quit.
 
 ### Changed
 
+- Selected Blender as the default theme for new configurations while preserving saved theme choices.
+- Replaced custom rounded rule badges with standard Qt labels.
 - Renamed Help > Extras to Help > Install for File Explorer and simplified the dedicated installation dialog to an explanation, status, and Install / Close buttons.
+
+### Fixed
+
+- Applied theme palettes to QML windows and their controls, including active, inactive, and disabled colors.
 
 ## [0.4.1] - 2026-10-19
 

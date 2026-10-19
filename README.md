@@ -2,7 +2,7 @@
 
 # FolderConformer
 
-A basic Windows Qt Quick application for moving files into folders using an ordered rule pipeline. All controls use the standard Qt appearance.
+A basic Windows Qt Quick application for moving files into folders using an ordered rule pipeline. Controls use the Blender theme by default.
 
 Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Start moving files**. By default, file rules process direct files and folder rules process direct subfolders. Enable subdirectories to include nested files and folders.
 
@@ -20,9 +20,11 @@ Folder rules match whole folder names without regard to case, preserving extensi
 
 Each matching file rule adds a folder to the destination. Landscape then extension gives `Landscape-FULL/png/photo.png`; extension then landscape gives `png/Landscape-FULL/photo.png`. Disabled rules add nothing. Consecutive file rules compose one destination before moving files. Folder rules then operate on the resulting folders. Existing same-name files are never replaced on Windows: the rename fails and the run stops. Earlier moves remain in place. The log shows raw failures; there is no automatic recovery.
 
-The **Folders** group below Rules contains the landscape destination (default `Landscape-FULL`), user configuration folder, video destination (default `video/`), and image destination (default `photo/`). Folder rules use the configured destinations. The **Files** group contains semicolon-separated video and image extension lists used to match extension folders. The defaults are the lists above; add `gif` to the image list to include GIF folders. Matching ignores case, surrounding whitespace, and leading dots.
+The **Folders** group below Rules contains the landscape destination (default `Landscape-FULL`), video destination (default `video/`), and image destination (default `photo/`). Folder rules use the configured destinations. The **Files** group contains semicolon-separated video and image extension lists used to match extension folders. The defaults are the lists above; add `gif` to the image list to include GIF folders. Matching ignores case, surrounding whitespace, and leading dots.
 
-The input folder, destination folders, extension lists, recursive scanning checkbox, all six rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows). Browse for a different configuration folder or edit its path and finish editing to save the current settings there. The default configuration file remembers that location for future launches. **Open** opens the selected configuration folder.
+The input folder, destination folders, extension lists, recursive scanning checkbox, all six rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows). In **File > Settings > Data**, browse for a different configuration folder or edit its path and finish editing to save the current settings there. The default configuration file remembers that location for future launches. **Open** opens the selected configuration folder.
+
+**File > Settings > Appearance** provides one theme dropdown with **System default** and the [qt-themes](https://github.com/beatreichenbach/qt-themes) palettes. Blender is selected by default for new configurations. The selection is saved through QSettings. Click **Restart & Apply** beside the dropdown to relaunch with the selected theme. System default keeps Qt’s platform style; a selected color theme uses Qt’s built-in Fusion controls so the palette applies consistently.
 
 ## Development
 

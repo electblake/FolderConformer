@@ -13,6 +13,8 @@ ApplicationWindow {
     title: qsTr("FolderConformer %1").arg(Qt.application.version)
     onClosing: function(close) {
         close.accepted = !window.controller.running && !window.controller.updates.busy
+        if (close.accepted && settingsLoader.status === Loader.Ready)
+            settingsLoader.item.close()
         if (close.accepted && updateLoader.status === Loader.Ready)
             updateLoader.item.close()
         if (close.accepted && installExplorerLoader.status === Loader.Ready)
@@ -27,6 +29,16 @@ ApplicationWindow {
                 text: qsTr("Select Folder..")
                 enabled: !window.controller.running && !window.controller.updates.busy
                 onTriggered: conformerScreen.choosingFolder = true
+            }
+            MenuItem {
+                objectName: "settingsMenu"
+                text: qsTr("&Settings…")
+                enabled: !window.controller.running && !window.controller.updates.busy
+                onTriggered: {
+                    settingsLoader.active = true
+                    settingsLoader.item.show()
+                    settingsLoader.item.requestActivate()
+                }
             }
             MenuSeparator {}
             MenuItem {
@@ -67,12 +79,25 @@ ApplicationWindow {
     }
 
     Loader {
+        id: settingsLoader
+        active: false
+        sourceComponent: Component {
+            SettingsDialog {
+                controller: window.controller
+                transientParent: window
+                palette: window.palette
+            }
+        }
+    }
+
+    Loader {
         id: installExplorerLoader
         active: false
         sourceComponent: Component {
             InstallExplorer {
                 controller: window.controller
                 transientParent: window
+                palette: window.palette
             }
         }
     }
@@ -84,6 +109,7 @@ ApplicationWindow {
             SoftwareUpdate {
                 updater: window.controller.updates
                 transientParent: window
+                palette: window.palette
                 onInstallRequested: {
                     window.pending_installer = window.controller.updates.installerPath
                     window.close()

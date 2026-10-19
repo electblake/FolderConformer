@@ -18,18 +18,10 @@ GroupBox {
                 required property int index
                 required property var modelData
                 Layout.fillWidth: true
-                Rectangle {
+                Label {
                     Layout.preferredWidth: 64
-                    implicitHeight: ruleType.implicitHeight + 8
-                    radius: height / 2
-                    color: panel.palette.alternateBase
-                    border.color: panel.palette.mid
-                    Label {
-                        id: ruleType
-                        anchors.centerIn: parent
-                        text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "extension"
-                            ? qsTr("file") : qsTr("folder")
-                    }
+                    text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "extension"
+                        ? qsTr("file") : qsTr("folder")
                 }
                 CheckBox {
                     objectName: ruleRow.modelData.id + "Enabled"

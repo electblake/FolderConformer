@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QEvent, QEventLoop, QMetaObject, QObject, QPointF, QSettings, QTimer, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QEvent, QEventLoop, QMetaObject, QObject, QPointF, QSettings, QTimer, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QKeyEvent
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -215,7 +215,6 @@ class SettingsUiTests(unittest.TestCase):
         window = engine.rootObjects()[0]
         APP.processEvents()
         for name, value in (("inputFolder", r"C:\media\日本語 é"), ("landscapeFolder", "Wide media é"),
-                            ("configFolder", str(Path(self.temporary.name) / "settings é")),
                             ("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
                             ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
             field = window.findChild(QObject, name)
@@ -238,7 +237,6 @@ class SettingsUiTests(unittest.TestCase):
         restored_window = restored_engine.rootObjects()[0]
         self.assertEqual(restored_window.findChild(QObject, "inputFolder").property("text"), r"C:\media\日本語 é")
         self.assertEqual(restored_window.findChild(QObject, "landscapeFolder").property("text"), "Wide media é")
-        self.assertEqual(restored.configFolder, str(Path(self.temporary.name) / "settings é"))
         self.assertEqual(Path(restored.settings.fileName()), Path(restored.configFolder) / "FolderConformer.ini")
         for name, value in (("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
                             ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
@@ -249,6 +247,108 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(restored.rules, [{"id": rule_id, "enabled": False} for rule_id in
                                          [rule_ids[1], rule_ids[0], *rule_ids[2:]]])
         restored_window.close()
+
+    def test_settings_dialog_saves_theme_and_moves_configuration(self):
+        controller = Controller()
+        controller.folder = str(Path(self.temporary.name) / "media")
+        engine = QQmlApplicationEngine()
+        messages = []
+        engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        menu = window.findChild(QObject, "settingsMenu")
+        QMetaObject.invokeMethod(menu, "triggered")
+        APP.processEvents()
+        dialog = window.findChild(QQuickWindow, "settingsDialog")
+        self.assertTrue(dialog.isVisible())
+        self.assertIsNone(window.findChild(QObject, "ruleFoldersPanel").findChild(QObject, "configFolder"))
+        selector = dialog.findChild(QObject, "themeSelector")
+        self.assertEqual(selector.property("currentText"), "blender")
+        selector.setProperty("currentIndex", controller.themes.index("nord"))
+        QMetaObject.invokeMethod(selector, "activated", Q_ARG(int, selector.property("currentIndex")))
+        self.assertEqual(controller.theme, "nord")
+        field = dialog.findChild(QObject, "configFolder")
+        destination = str(Path(self.temporary.name) / "settings é")
+        field.setProperty("text", destination)
+        QMetaObject.invokeMethod(field, "editingFinished")
+        restored = Controller()
+        self.assertEqual(restored.configFolder, destination)
+        self.assertEqual(restored.theme, "nord")
+        self.assertEqual(restored.folder, controller.folder)
+        self.assertEqual(restored.settings.value("appearance/theme"), "nord")
+        self.assertEqual(restored.settings.status(), QSettings.Status.NoError)
+        read_script = (
+            "import json,sys; from pathlib import Path; from PySide6.QtCore import QCoreApplication; "
+            "from folderconformer import app; qt=QCoreApplication([]); "
+            "app.user_config_path=lambda *a,**k:Path(sys.argv[1]); c=app.Controller(); "
+            "print(json.dumps([c.configFolder,c.theme,c.folder]))"
+        )
+        result = subprocess.run([sys.executable, "-c", read_script, str(self.config_folder)],
+                                check=True, capture_output=True, text=True)
+        self.assertEqual(json.loads(result.stdout), [destination, "nord", controller.folder])
+        with patch("folderconformer.app.QGuiApplication.quit") as quit_app:
+            QMetaObject.invokeMethod(dialog.findChild(QObject, "restartAndApply"), "clicked")
+            quit_app.assert_called_once()
+        self.assertTrue(controller.restart_requested)
+        self.assertEqual(Controller().theme, "nord")
+        selector.setProperty("currentIndex", 0)
+        QMetaObject.invokeMethod(selector, "activated", Q_ARG(int, 0))
+        self.assertEqual(Controller().theme, "")
+        QMetaObject.invokeMethod(dialog.findChild(QObject, "closeSettings"), "clicked")
+        self.assertFalse(dialog.isVisible())
+        QMetaObject.invokeMethod(menu, "triggered")
+        self.assertTrue(dialog.isVisible())
+        self.assertEqual(messages, [])
+        window.close()
+        self.assertFalse(dialog.isVisible())
+
+    def test_theme_colors_reach_rendered_qml_windows(self):
+        script = r"""
+import json, sys
+from pathlib import Path
+from unittest.mock import patch
+from PySide6.QtCore import QMetaObject, QObject
+from PySide6.QtQml import QQmlEngine, QQmlExpression
+from PySide6.QtTest import QTest
+from folderconformer import app
+qt = app.QGuiApplication([])
+engine = app.QQmlApplicationEngine()
+config = Path(sys.argv[1])
+theme = sys.argv[2]
+app.user_config_path = lambda *a, **k: config
+controller = app.Controller()
+controller.theme = theme
+colors = []
+def inspect():
+    window = engine.rootObjects()[0]
+    QMetaObject.invokeMethod(window.findChild(QObject, "settingsMenu"), "triggered")
+    QTest.qWait(100)
+    dialog = window.findChild(QObject, "settingsDialog")
+    for obj, expression in ((window, "palette.window.toString()"),
+                            (dialog, "palette.window.toString()"),
+                            (dialog.findChild(QObject, "configFolder"), "palette.base.toString()"),
+                            (dialog.findChild(QObject, "restartAndApply"), "palette.button.toString()")):
+        colors.append(QQmlExpression(QQmlEngine.contextForObject(obj), obj, expression).evaluate()[0])
+    image = dialog.grabWindow()
+    colors.append(image.pixelColor(0, 0).name())
+    window.close()
+    return 0
+with patch.object(app, "QGuiApplication", return_value=qt), patch.object(app, "QQmlApplicationEngine", return_value=engine), patch.object(qt, "exec", side_effect=inspect), patch.object(sys, "argv", ["folderconformer"]):
+    app.main()
+print(json.dumps(colors))
+"""
+        import qt_themes
+        from PySide6.QtGui import QPalette
+        for theme in ("nord", "github_light"):
+            with self.subTest(theme=theme):
+                result = subprocess.run([sys.executable, "-c", script, str(self.config_folder), theme],
+                                        check=True, capture_output=True, text=True, timeout=15)
+                palette = QPalette()
+                qt_themes.update_palette(palette, qt_themes.get_themes()[theme])
+                self.assertEqual(json.loads(result.stdout), [palette.window().color().name(),
+                    palette.window().color().name(), palette.base().color().name(),
+                    palette.button().color().name(), palette.window().color().name()])
 
     def test_qml_loads(self):
         controller = Controller()
@@ -264,7 +364,7 @@ class SettingsUiTests(unittest.TestCase):
         panels = [window.findChild(QQuickItem, name) for name in ("rulesPanel", "ruleFoldersPanel", "filesPanel")]
         for upper, lower in zip(panels, panels[1:]):
             self.assertLessEqual(upper.y() + upper.height(), lower.y())
-        for name in ("landscapeFolder", "configFolder", "videoFolder", "imageFolder"):
+        for name in ("landscapeFolder", "videoFolder", "imageFolder"):
             self.assertIsNotNone(panels[1].findChild(QObject, name))
         checkbox = window.findChild(QObject, "includeSubdirectories")
         self.assertFalse(checkbox.property("checked"))

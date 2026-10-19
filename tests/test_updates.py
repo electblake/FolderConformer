@@ -244,9 +244,23 @@ class UpdateTests(unittest.TestCase):
             engine.rootObjects.return_value[0].property.return_value = installer
             with patch("folderconformer.app.QGuiApplication", return_value=application), patch(
                 "folderconformer.app.QQmlApplicationEngine", return_value=engine,
-            ), patch("folderconformer.app.Controller"), patch("folderconformer.app.sys.argv", ["folderconformer"]), patch(
+            ), patch("folderconformer.app.Controller", return_value=MagicMock(theme="", restart_requested=False)), patch("folderconformer.app.sys.argv", ["folderconformer"]), patch(
                 "folderconformer.app.os.startfile", side_effect=lambda path: events.append(path),
             ) as launch:
                 self.assertEqual(app.main(), 42)
                 self.assertEqual(events, ["event loop returned"] + ([installer] if installer is not None else []))
                 self.assertEqual(launch.call_count, int(installer is not None))
+
+    def test_restart_launches_after_event_loop_returns(self):
+        events = []
+        application = MagicMock()
+        application.exec.side_effect = lambda: (events.append("quit"), 0)[1]
+        engine = MagicMock()
+        engine.rootObjects.return_value[0].property.return_value = None
+        with patch.object(app, "QGuiApplication", return_value=application), patch.object(
+            app, "QQmlApplicationEngine", return_value=engine,
+        ), patch.object(app, "Controller", return_value=MagicMock(theme="", restart_requested=True)), patch.object(
+            app.sys, "argv", ["folderconformer"],
+        ), patch.object(app.subprocess, "Popen", side_effect=lambda args: events.append(args)):
+            self.assertEqual(app.main(), 0)
+        self.assertEqual(events, ["quit", [app.sys.executable, "-I", "-m", "folderconformer"]])

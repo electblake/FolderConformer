@@ -257,6 +257,7 @@ source = { editable = "." }
 dependencies = [
     { name = "platformdirs" },
     { name = "pyside6" },
+    { name = "qt-themes" },
     { name = "static-ffmpeg" },
 ]
 
@@ -264,6 +265,7 @@ dependencies = [
 requires-dist = [
     { name = "platformdirs", specifier = "==4.13.5" },
     { name = "pyside6", specifier = "==6.12.0" },
+    { name = "qt-themes", specifier = "==0.4.1" },
     { name = "static-ffmpeg", specifier = "==3.0" },
 ]
 
@@ -541,6 +543,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz", hash = "sha256:d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755", size = 29471, upload-time = "2024-08-14T10:15:34.626Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/3d/8161f7711c017e01ac9f008dfddd9410dff3674334c233bde66e7ba65bbf/pywin32_ctypes-0.2.3-py3-none-any.whl", hash = "sha256:8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8", size = 30756, upload-time = "2024-08-14T10:15:33.187Z" },
+]
+
+[[package]]
+name = "qt-themes"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/15/9a373063de1472808b02d7a4551418b478c8d824ec833bc9092e99125e3f/qt_themes-0.4.1.tar.gz", hash = "sha256:74351059d1b5bf26a5bf71131e70a3e5ac66908c37d190b865d178215575579c", size = 9587, upload-time = "2026-09-27T21:58:02.81Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/d8/c33ab285a4fe74441a29ad246fb7cac00da2b6c4d7d0308bb4df66a7d3bb/qt_themes-0.4.1-py3-none-any.whl", hash = "sha256:5e77c8c3e7d04f9fd77b39e7434f14e72f378ec8fa1580b3021f9dcbb54e2979", size = 11436, upload-time = "2026-09-27T21:58:01.561Z" },
 ]
 
 [[package]]
