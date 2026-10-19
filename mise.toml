@@ -1,0 +1,23 @@
+[tools]
+powershell = "latest"
+python = "3.12"
+uv = "latest"
+
+[tasks.run]
+description = "Start FolderConformer"
+depends = ["prepare-tools"]
+run = "uv run python main.py"
+
+[tasks.prepare-tools]
+description = "Stage the uv-managed FFmpeg tools"
+run = "uv run python packaging/prepare_tools.py"
+
+[tasks.test]
+description = "Check media rules and settings"
+depends = ["prepare-tools"]
+run = "uv run python -m unittest discover -s tests -v"
+
+[tasks.build]
+description = "Build the Windows application and installer"
+depends = ["test"]
+run = "uv run python packaging/build.py"

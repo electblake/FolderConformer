@@ -1,0 +1,28 @@
+[project]
+name = "folderconformer"
+version = "0.3.0"
+description = "Organize a folder with ordered media and extension rules."
+requires-python = ">=3.12"
+dependencies = [
+    "platformdirs==4.13.5",
+    "pyside6==6.12.0",
+    "static-ffmpeg==3.0",
+]
+
+[project.scripts]
+folderconformer = "folderconformer.app:main"
+
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["folderconformer"]
+
+[tool.setuptools.package-data]
+folderconformer = ["qml/*.qml"]
+
+[dependency-groups]
+dev = [
+    "pyinstaller==6.22.3",
+]
