@@ -16,7 +16,9 @@ Folder rules match whole folder names without regard to case, preserving extensi
 
 Each matching file rule adds a folder to the destination. Landscape then extension gives `Landscape-FULL/png/photo.png`; extension then landscape gives `png/Landscape-FULL/photo.png`. Disabled rules add nothing. Consecutive file rules compose one destination before moving files. Folder rules then operate on the resulting folders. Existing same-name files are never replaced on Windows: the rename fails and the run stops. Earlier moves remain in place. The log shows raw failures; there is no automatic recovery.
 
-The input folder, landscape folder name, recursive scanning checkbox, all six rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows).
+The **Folders** group below Rules contains the landscape destination (default `Landscape-FULL`), user configuration folder, video destination (default `video/`), and image destination (default `photo/`). Folder rules use the configured destinations. The **Files** group contains semicolon-separated video and image extension lists used to match extension folders. The defaults are the lists above; add `gif` to the image list to include GIF folders. Matching ignores case, surrounding whitespace, and leading dots.
+
+The input folder, destination folders, extension lists, recursive scanning checkbox, all six rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows). Browse for a different configuration folder or edit its path and finish editing to save the current settings there. The default configuration file remembers that location for future launches. **Open** opens the selected configuration folder.
 
 ## Development
 
@@ -29,7 +31,7 @@ mise run run
 mise run test
 ```
 
-`prepare-tools` obtains FFmpeg 8.0.1 and ffprobe from `static-ffmpeg==3.0`, stages private copies under `build/tools`, and records SHA-256 hashes and build configuration. The installed application uses its bundled copies and does not download tools at runtime.
+`prepare-tools` obtains FFmpeg and ffprobe through `static-ffmpeg==3.0` inside the project environment. The installed application reads the tools from its own environment; setup downloads them before the app is launched.
 
 ## Windows installer
 
@@ -40,4 +42,8 @@ $env:ISCC_PATH = 'C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
 mise run build
 ```
 
-The build reads version metadata from `pyproject.toml`, freezes an onedir application, and compiles `dist/installer/FolderConformer-Windows-Setup-0.3.0.exe`. Installation is per-user, with a Start menu shortcut and an optional desktop shortcut. Settings are stored outside the installation and survive upgrades/uninstall.
+The build compiles `dist/installer/FolderConformer-Windows-Online-Setup-0.3.0.exe` from app source, QML, and the lockfile. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
+
+`platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
+
+Additional dependencies belong in `pyproject.toml` and `uv.lock`; setup installs them without adding their binaries to the installer. Installation requires internet access. Run `uv run python packaging/smoke.py` to check online installation, the installed app, file processing, reinstall, and uninstall.

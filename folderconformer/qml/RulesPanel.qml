@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 GroupBox {
     id: panel
+    objectName: "rulesPanel"
     required property QtObject controller
     title: qsTr("Rules — applied from top to bottom")
 
@@ -36,10 +37,10 @@ GroupBox {
                     text: ({
                         landscape: qsTr("Landscape and square media (ratio ≥ 1)"),
                         extension: qsTr("Group all files by extension"),
-                        rename_images: qsTr("Rename image / images folders to photo"),
-                        rename_videos: qsTr("Rename video / videos folders to video"),
-                        photo_extensions: qsTr("Move image extension folders into photo (excludes GIF)"),
-                        video_extensions: qsTr("Move video extension folders into video")
+                        rename_images: qsTr("Rename image / images folders to %1").arg(panel.controller.imageFolder),
+                        rename_videos: qsTr("Rename video / videos folders to %1").arg(panel.controller.videoFolder),
+                        photo_extensions: qsTr("Move image extension folders into %1").arg(panel.controller.imageFolder),
+                        video_extensions: qsTr("Move video extension folders into %1").arg(panel.controller.videoFolder)
                     })[ruleRow.modelData.id]
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
@@ -57,15 +58,6 @@ GroupBox {
                     onClicked: panel.controller.moveRule(ruleRow.index, 1)
                 }
             }
-        }
-        Label { text: qsTr("Landscape folder name") }
-        TextField {
-            objectName: "landscapeFolder"
-            Layout.fillWidth: true
-            text: panel.controller.landscapeFolder
-            Accessible.name: qsTr("Landscape folder name")
-            validator: RegularExpressionValidator { regularExpression: /[^<>:"/\\|?*.][^<>:"/\\|?*]*/ }
-            onTextEdited: panel.controller.landscapeFolder = text
         }
         Label {
             Layout.fillWidth: true

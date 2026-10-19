@@ -15,15 +15,38 @@ Pane {
         anchors.fill: parent
         spacing: 12
 
-        FolderPanel {
+        ScrollView {
+            id: settingsScroll
+            objectName: "settingsScroll"
             Layout.fillWidth: true
-            controller: screen.controller
-            enabled: !screen.controller.running
-        }
-        RulesPanel {
-            Layout.fillWidth: true
-            controller: screen.controller
-            enabled: !screen.controller.running
+            Layout.fillHeight: true
+            Layout.preferredHeight: 800
+            contentWidth: availableWidth
+            clip: true
+            ColumnLayout {
+                width: settingsScroll.availableWidth
+                spacing: 12
+                FolderPanel {
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                    enabled: !screen.controller.running
+                }
+                RulesPanel {
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                    enabled: !screen.controller.running
+                }
+                RuleFoldersPanel {
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                    enabled: !screen.controller.running
+                }
+                FilesPanel {
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                    enabled: !screen.controller.running
+                }
+            }
         }
         Label {
             Layout.fillWidth: true
@@ -58,6 +81,8 @@ Pane {
         ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.preferredHeight: 120
+            Layout.minimumHeight: 80
             TextArea {
                 id: log
                 readOnly: true

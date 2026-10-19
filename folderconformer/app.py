@@ -3,12 +3,13 @@ import json
 import math
 import re
 import sys
-import tomllib
+from importlib.metadata import version
 from pathlib import Path
 
 from platformdirs import user_config_path
+from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QObject, Property, QProcess, QProcessEnvironment, QSettings, QUrl, Signal, Slot
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 
@@ -23,11 +24,20 @@ class Controller(QObject):
     def __init__(self):
         super().__init__()
         settings_path = user_config_path("FolderConformer", appauthor=False) / "FolderConformer.ini"
-        self.settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
+        self.location_settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
+        self.location_settings.setFallbacksEnabled(False)
+        self._config_folder = self.location_settings.value("configFolder", str(settings_path.parent), type=str)
+        self.settings = QSettings(str(Path(self._config_folder) / "FolderConformer.ini"), QSettings.Format.IniFormat)
         self.settings.setFallbacksEnabled(False)
         self._folder = self.settings.value("folder", "", type=str)
         self._include_subdirectories = self.settings.value("includeSubdirectories", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
+        self._video_folder = self.settings.value("videoFolder", "video/", type=str)
+        self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
+        self._video_extensions = self.settings.value(
+            "videoExtensions", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf", type=str
+        )
+        self._image_extensions = self.settings.value("imageExtensions", "jpg;jpeg;png;webp;heic", type=str)
         self._rules = json.loads(self.settings.value(
             "rules", json.dumps([{"id": rule_id, "enabled": True} for rule_id in (
                 "landscape", "extension", "rename_images", "rename_videos", "photo_extensions", "video_extensions",
@@ -47,6 +57,10 @@ class Controller(QObject):
         self.settings.setValue("folder", self._folder)
         self.settings.setValue("includeSubdirectories", self._include_subdirectories)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
+        self.settings.setValue("videoFolder", self._video_folder)
+        self.settings.setValue("imageFolder", self._image_folder)
+        self.settings.setValue("videoExtensions", self._video_extensions)
+        self.settings.setValue("imageExtensions", self._image_extensions)
         self.settings.setValue("rules", json.dumps(self._rules))
         self.settings.sync()
         self.configurationChanged.emit()
@@ -78,6 +92,56 @@ class Controller(QObject):
         self._include_subdirectories = value
         self.save()
 
+    @Property(str, notify=configurationChanged)
+    def configFolder(self):
+        return self._config_folder
+
+    @configFolder.setter
+    def configFolder(self, value):
+        self.settings.sync()
+        self._config_folder = value
+        self.settings = QSettings(str(Path(value) / "FolderConformer.ini"), QSettings.Format.IniFormat)
+        self.settings.setFallbacksEnabled(False)
+        self.save()
+        self.location_settings.setValue("configFolder", value)
+        self.location_settings.sync()
+
+    @Property(str, notify=configurationChanged)
+    def videoFolder(self):
+        return self._video_folder
+
+    @videoFolder.setter
+    def videoFolder(self, value):
+        self._video_folder = value
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def imageFolder(self):
+        return self._image_folder
+
+    @imageFolder.setter
+    def imageFolder(self, value):
+        self._image_folder = value
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def videoExtensions(self):
+        return self._video_extensions
+
+    @videoExtensions.setter
+    def videoExtensions(self, value):
+        self._video_extensions = value
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def imageExtensions(self):
+        return self._image_extensions
+
+    @imageExtensions.setter
+    def imageExtensions(self, value):
+        self._image_extensions = value
+        self.save()
+
     @Property("QVariantList", notify=configurationChanged)
     def rules(self):
         return self._rules
@@ -89,6 +153,16 @@ class Controller(QObject):
     @Slot(QUrl)
     def selectFolder(self, url):
         self.folder = url.toLocalFile()
+
+    @Slot(QUrl)
+    def selectConfigFolder(self, url):
+        self.configFolder = url.toLocalFile()
+
+    @Slot()
+    def openConfigFolder(self):
+        path = Path(self._config_folder)
+        path.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
 
     @Slot(int, bool)
     def setEnabled(self, index, enabled):
@@ -106,15 +180,12 @@ class Controller(QObject):
         self.pending = ""
         self.timer = QElapsedTimer()
         self.timer.start()
-        arguments = ["--worker", self._folder, json.dumps(self._rules), self._landscape_folder]
+        arguments = ["--worker", self._folder, json.dumps(self._rules), self._landscape_folder,
+                     self._video_folder, self._image_folder, self._video_extensions, self._image_extensions]
         if self._include_subdirectories:
             arguments.append("--recursive")
-        if getattr(sys, "frozen", False):
-            self.process.setProgram(sys.executable)
-        else:
-            self.process.setProgram(sys.executable)
-            arguments = [str(Path(__file__).parent.parent / "main.py"), *arguments]
-        self.process.setArguments(arguments)
+        self.process.setProgram(str(Path(sys.executable).with_name("python.exe")))
+        self.process.setArguments(["-I", "-m", "folderconformer", *arguments])
         self.process.start()
 
     @Slot()
@@ -143,20 +214,18 @@ def main():
     app = QGuiApplication(sys.argv)
     app.setOrganizationName("FolderConformer")
     app.setApplicationName("FolderConformer")
-    base = Path(__file__).resolve().parent.parent
-    metadata = tomllib.loads((base / "pyproject.toml").read_text(encoding="utf-8"))
-    app.setApplicationVersion(metadata["project"]["version"])
+    app.setApplicationVersion(version("folderconformer"))
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import conform
-        tools = base / ("tools" if getattr(sys, "frozen", False) else "build/tools")
+        tools = Path(get_platform_dir())
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
-                recursive="--recursive" in sys.argv[5:])
+                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:])
         return 0
     controller = Controller()
     engine = QQmlApplicationEngine()
     engine.setInitialProperties({"controller": controller})
     engine.objectCreationFailed.connect(lambda: app.exit(1))
-    engine.load(QUrl.fromLocalFile(str(base / "folderconformer" / "qml" / "Main.qml")))
+    engine.load(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "Main.qml")))
     return app.exec()

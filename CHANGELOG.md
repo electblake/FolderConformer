@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Folders controls for landscape, video, image, and user configuration folders, with Browse and Open actions for the configuration folder.
+- Added Files controls for semicolon-separated video and image extension lists, initialized with the existing extension lists.
+
+### Changed
+
+- Sourced folder-rule destinations and extension matches from the saved controls and reflected destination changes in rule labels.
+- Saved the new controls through QSettings and retained the selected configuration location across restarts.
+- Made the settings groups scroll while keeping processing controls and the log visible.
+- Replaced the bundled Windows runtime with an online installer that downloads verified uv, installs managed Python, and syncs locked dependencies into a platformdirs user-data venv.
+- Installed FFmpeg and ffprobe during setup through the uv-managed dependency instead of embedding executables in Setup.
+- Launched the installed Python package directly and removed the PyInstaller build.
+
 ## [0.3.0] - 2026-10-19
 
 ### Added

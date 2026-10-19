@@ -8,14 +8,18 @@ import unittest
 from pathlib import Path
 
 from PySide6.QtGui import QGuiApplication
+from static_ffmpeg.run import get_platform_dir
 
 from folderconformer.pipeline import conform, is_landscape
 
 
 ROOT = Path(__file__).resolve().parent.parent
-FFMPEG = ROOT / "build/tools/ffmpeg.exe"
-FFPROBE = ROOT / "build/tools/ffprobe.exe"
+FFMPEG = Path(get_platform_dir()) / "ffmpeg.exe"
+FFPROBE = Path(get_platform_dir()) / "ffprobe.exe"
 APP = QGuiApplication.instance() or QGuiApplication([])
+FOLDER_FILES = ("video/", "photo/",
+                "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
+                "jpg;jpeg;png;webp;heic")
 
 
 class PipelineTests(unittest.TestCase):
@@ -33,7 +37,7 @@ class PipelineTests(unittest.TestCase):
 
     def run_rules(self, rules, recursive=False):
         with contextlib.redirect_stdout(io.StringIO()):
-            conform(self.folder, rules, "Landscape-FULL", FFPROBE, recursive=recursive)
+            conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES, recursive=recursive)
 
     def test_summary_counts_folder_changes_when_no_files_are_scanned(self):
         for name in ("Images", "Videos", "jpg", "mp4"):
@@ -43,7 +47,7 @@ class PipelineTests(unittest.TestCase):
         )]
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            conform(self.folder, rules, "Landscape-FULL", FFPROBE)
+            conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES)
         lines = output.getvalue().splitlines()
         self.assertIn("[1/1] Renamed folder: Images \u2192 photo", lines)
         self.assertIn("[1/1] Renamed folder: Videos \u2192 video", lines)
@@ -59,7 +63,7 @@ class PipelineTests(unittest.TestCase):
         rules = [{"id": "extension", "enabled": True}, {"id": "photo_extensions", "enabled": True}]
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            conform(self.folder, rules, "Landscape-FULL", FFPROBE)
+            conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES)
         self.assertEqual(output.getvalue().splitlines()[-1],
                          "Completed: 2 files processed, 2 files moved, 0 folders renamed, 1 folders moved.")
 
@@ -106,6 +110,21 @@ class PipelineTests(unittest.TestCase):
         (self.folder / "second.PNG").write_text("second")
         self.run_rules(list(reversed(rules)))
         self.assertEqual((self.folder / "png/second.PNG").read_text(), "second")
+
+    def test_configured_folders_and_extensions_replace_defaults(self):
+        for name in ("Images", "Videos", "GIF", "mxf", "jpg", "mp4"):
+            (self.folder / name).mkdir()
+            (self.folder / name / "keep.txt").write_text(name)
+        rules = [{"id": rule_id, "enabled": True} for rule_id in (
+            "rename_images", "rename_videos", "photo_extensions", "video_extensions",
+        )]
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ")
+            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ", recursive=True)
+        for path, content in (("Pictures/keep.txt", "Images"), ("Clips/keep.txt", "Videos"),
+                              ("Pictures/GIF/keep.txt", "GIF"), ("Clips/mxf/keep.txt", "mxf"),
+                              ("jpg/keep.txt", "jpg"), ("mp4/keep.txt", "mp4")):
+            self.assertEqual((self.folder / path).read_text(), content)
 
     def test_recursive_folder_rules_and_disabled_rules(self):
         (self.folder / "nested/IMAGES/PNG").mkdir(parents=True)
@@ -245,7 +264,7 @@ class PipelineTests(unittest.TestCase):
         folder.mkdir()
         (folder / "é.txt").write_text("preserved")
         result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL"],
+                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES],
                                 check=True, capture_output=True, encoding="utf-8",
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)

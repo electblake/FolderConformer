@@ -34,6 +34,10 @@ class SettingsUiTests(unittest.TestCase):
         while pending:
             item = pending.pop()
             if item.objectName() == name:
+                scroll = window.findChild(QObject, "settingsScroll").property("contentItem")
+                position = item.mapToScene(QPointF(0, 0))
+                scroll.setProperty("contentY", max(0, scroll.property("contentY") + position.y() - 100))
+                APP.processEvents()
                 return item
             pending.extend(item.childItems())
 
@@ -64,11 +68,22 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(Path(controller.settings.fileName()), self.config_folder / "FolderConformer.ini")
         self.assertEqual(controller.settings.format(), QSettings.Format.IniFormat)
         self.assertFalse(controller.settings.fallbacksEnabled())
+        self.assertEqual(controller.configFolder, str(self.config_folder))
+        self.assertEqual(controller.videoFolder, "video/")
+        self.assertEqual(controller.imageFolder, "photo/")
+        self.assertEqual(controller.videoExtensions,
+                         "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf")
+        self.assertEqual(controller.imageExtensions, "jpg;jpeg;png;webp;heic")
 
     def test_all_control_values_restore_in_fresh_process(self):
         controller = Controller()
         controller.selectFolder(QUrl.fromLocalFile(r"C:\media\日本語 é"))
         controller.landscapeFolder = "Paysage é"
+        controller.videoFolder = "Clips/"
+        controller.imageFolder = "Pictures/"
+        controller.videoExtensions = "mxf;mp4"
+        controller.imageExtensions = "gif;png"
+        controller.selectConfigFolder(QUrl.fromLocalFile(str(Path(self.temporary.name) / "custom config")))
         controller.includeSubdirectories = True
         for index in range(len(controller.rules)):
             controller.setEnabled(index, False)
@@ -77,13 +92,15 @@ class SettingsUiTests(unittest.TestCase):
             "import json,sys; from pathlib import Path; from PySide6.QtCore import QCoreApplication; "
             "from folderconformer import app; qt=QCoreApplication([]); "
             "app.user_config_path=lambda *a,**k:Path(sys.argv[1]); c=app.Controller(); "
-            "print(json.dumps([c.folder,c.landscapeFolder,c.includeSubdirectories,c.rules]))"
+            "print(json.dumps([c.folder,c.landscapeFolder,c.includeSubdirectories,c.rules,"
+            "c.videoFolder,c.imageFolder,c.videoExtensions,c.imageExtensions,c.configFolder]))"
         )
         result = subprocess.run([sys.executable, "-c", read_script, str(self.config_folder)],
                                 check=True, capture_output=True, text=True)
         self.assertEqual(json.loads(result.stdout), [
             controller.folder, "Paysage é", True,
             controller.rules,
+            "Clips/", "Pictures/", "mxf;mp4", "gif;png", controller.configFolder,
         ])
         self.assertEqual(controller.settings.status(), QSettings.Status.NoError)
 
@@ -112,10 +129,16 @@ class SettingsUiTests(unittest.TestCase):
         folder = Path(self.temporary.name) / "media"
         (folder / "Images").mkdir(parents=True)
         (folder / "Videos").mkdir()
+        (folder / "GIF").mkdir()
+        (folder / "mxf").mkdir()
         controller = Controller()
         controller.folder = str(folder)
+        controller.videoFolder = "Clips/"
+        controller.imageFolder = "Pictures/"
+        controller.videoExtensions = "mxf"
+        controller.imageExtensions = "gif"
         controller._rules = [{"id": rule_id, "enabled": True} for rule_id in
-                             ("rename_images", "rename_videos", "extension")]
+                             ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "extension")]
         engine = QQmlApplicationEngine()
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
@@ -131,8 +154,10 @@ class SettingsUiTests(unittest.TestCase):
         QTimer.singleShot(10000, loop.quit)
         loop.exec()
         self.assertEqual(results, [0])
-        self.assertEqual([event[:2] for event in progress], [(1, 1), (1, 1)])
-        summary = "0 files processed, 0 files moved, 2 folders renamed, 0 folders moved."
+        self.assertEqual([event[:2] for event in progress], [(1, 1)] * 4)
+        for name in ("Pictures/GIF", "Clips/mxf"):
+            self.assertTrue((folder / name).is_dir())
+        summary = "0 files processed, 0 files moved, 2 folders renamed, 2 folders moved."
         self.assertEqual(summaries, [summary])
         screen = window.findChild(QObject, "conformerScreen")
         self.assertEqual(screen.property("status"), "Complete: " + summary)
@@ -188,7 +213,10 @@ class SettingsUiTests(unittest.TestCase):
         engine.load(qml)
         window = engine.rootObjects()[0]
         APP.processEvents()
-        for name, value in (("inputFolder", r"C:\media\日本語 é"), ("landscapeFolder", "Wide media é")):
+        for name, value in (("inputFolder", r"C:\media\日本語 é"), ("landscapeFolder", "Wide media é"),
+                            ("configFolder", str(Path(self.temporary.name) / "settings é")),
+                            ("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
+                            ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
             field = window.findChild(QObject, name)
             field.forceActiveFocus()
             QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
@@ -209,6 +237,11 @@ class SettingsUiTests(unittest.TestCase):
         restored_window = restored_engine.rootObjects()[0]
         self.assertEqual(restored_window.findChild(QObject, "inputFolder").property("text"), r"C:\media\日本語 é")
         self.assertEqual(restored_window.findChild(QObject, "landscapeFolder").property("text"), "Wide media é")
+        self.assertEqual(restored.configFolder, str(Path(self.temporary.name) / "settings é"))
+        self.assertEqual(Path(restored.settings.fileName()), Path(restored.configFolder) / "FolderConformer.ini")
+        for name, value in (("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
+                            ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
+            self.assertEqual(restored_window.findChild(QObject, name).property("text"), value)
         self.assertTrue(restored_window.findChild(QObject, "includeSubdirectories").property("checked"))
         for rule_id in rule_ids:
             self.assertFalse(self.rule_control(restored_window, rule_id + "Enabled").property("checked"))
@@ -227,6 +260,11 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(len(engine.rootObjects()), 1)
         window = engine.rootObjects()[0]
         APP.processEvents()
+        panels = [window.findChild(QQuickItem, name) for name in ("rulesPanel", "ruleFoldersPanel", "filesPanel")]
+        for upper, lower in zip(panels, panels[1:]):
+            self.assertLessEqual(upper.y() + upper.height(), lower.y())
+        for name in ("landscapeFolder", "configFolder", "videoFolder", "imageFolder"):
+            self.assertIsNotNone(panels[1].findChild(QObject, name))
         checkbox = window.findChild(QObject, "includeSubdirectories")
         self.assertFalse(checkbox.property("checked"))
         position = checkbox.mapToScene(QPointF(checkbox.width() / 2, checkbox.height() / 2)).toPoint()

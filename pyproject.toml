@@ -21,8 +21,3 @@ packages = ["folderconformer"]
 
 [tool.setuptools.package-data]
 folderconformer = ["qml/*.qml"]
-
-[dependency-groups]
-dev = [
-    "pyinstaller==6.22.3",
-]

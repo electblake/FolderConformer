@@ -26,7 +26,11 @@ def is_landscape(path: Path, ffprobe: Path) -> bool:
     return ratio >= 1
 
 
-def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, recursive: bool = False):
+def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path,
+            video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
+            recursive: bool = False):
+    video_suffixes = {extension.strip().lstrip(".").lower() for extension in video_extensions.split(";") if extension.strip()}
+    image_suffixes = {extension.strip().lstrip(".").lower() for extension in image_extensions.split(";") if extension.strip()}
     files_processed = files_moved = folders_renamed = folders_moved = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for file_rules, group in groupby(enabled_rules, key=lambda rule: rule["id"] in ("landscape", "extension")):
@@ -54,20 +58,17 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     name = source.name.lower()
                     target = source
                     if rule["id"] == "rename_images" and name in ("image", "images"):
-                        target = parent / "photo"
+                        target = parent / image_folder
                     elif rule["id"] == "rename_videos" and name in ("video", "videos"):
-                        target = parent / "video"
-                    elif rule["id"] == "photo_extensions" and name in ("jpg", "jpeg", "png", "webp", "heic"):
-                        if parent.name.lower() == "photo":
+                        target = parent / video_folder
+                    elif rule["id"] == "photo_extensions" and name in image_suffixes:
+                        if parent.name.lower() == Path(image_folder).name.lower():
                             continue
-                        target = parent / "photo" / source.name
-                    elif rule["id"] == "video_extensions" and name in (
-                        "mp4", "ts", "m4v", "wmv", "avi", "mov", "mkv", "webm", "mpg", "mpeg",
-                        "mts", "m2ts", "m2v", "vob", "flv", "3gp", "3g2", "ogv", "asf",
-                    ):
-                        if parent.name.lower() == "video":
+                        target = parent / image_folder / source.name
+                    elif rule["id"] == "video_extensions" and name in video_suffixes:
+                        if parent.name.lower() == Path(video_folder).name.lower():
                             continue
-                        target = parent / "video" / source.name
+                        target = parent / video_folder / source.name
                     if str(target) != str(source):
                         moves.append((source, target))
             print(f"Folder rule {rule['id']}: {len(moves)} folders to change", flush=True)
