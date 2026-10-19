@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a right-aligned Copy Output button below the activity log to select and copy all output to the clipboard.
 - Added File > Select Folder.. to set the input folder through the existing picker, followed by a divider and Quit.
 
+### Changed
+
+- Renamed Help > Extras to Help > Install for File Explorer and simplified the dedicated installation dialog to an explanation, status, and Install / Close buttons.
+
 ## [0.4.1] - 2026-10-19
 
 ### Added

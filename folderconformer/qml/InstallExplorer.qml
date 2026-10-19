@@ -4,10 +4,10 @@ import QtQuick.Layouts
 
 ApplicationWindow {
     id: dialog
-    objectName: "extras"
+    objectName: "installExplorerDialog"
     required property QtObject controller
     property string status: ""
-    title: qsTr("Extras")
+    title: qsTr("Install for File Explorer")
     flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowCloseButtonHint
     modality: Qt.WindowModal
     width: 520
@@ -21,26 +21,10 @@ ApplicationWindow {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
-        GroupBox {
-            title: qsTr("File Explorer")
+        Label {
             Layout.fillWidth: true
-            ColumnLayout {
-                anchors.fill: parent
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Add Open in FolderConformer to right-click menus for folders, folder backgrounds, and drives.")
-                    wrapMode: Text.WordWrap
-                }
-                Button {
-                    objectName: "installExplorer"
-                    text: qsTr("Install in File Explorer")
-                    enabled: !dialog.controller.running && !dialog.controller.updates.busy
-                    onClicked: {
-                        dialog.status = qsTr("Installing…")
-                        dialog.controller.installExplorer()
-                    }
-                }
-            }
+            text: qsTr("Add Open in FolderConformer to right-click menus for folders, folder backgrounds, and drives.")
+            wrapMode: Text.WordWrap
         }
         Label {
             objectName: "explorerStatus"
@@ -48,12 +32,23 @@ ApplicationWindow {
             text: dialog.status
             wrapMode: Text.WordWrap
         }
-        Button {
-            objectName: "closeExtras"
+        RowLayout {
             Layout.alignment: Qt.AlignRight
-            text: qsTr("Close")
-            enabled: !dialog.controller.running
-            onClicked: dialog.close()
+            Button {
+                objectName: "installExplorer"
+                text: qsTr("Install")
+                enabled: !dialog.controller.running && !dialog.controller.updates.busy
+                onClicked: {
+                    dialog.status = qsTr("Installing…")
+                    dialog.controller.installExplorer()
+                }
+            }
+            Button {
+                objectName: "closeInstallExplorer"
+                text: qsTr("Close")
+                enabled: !dialog.controller.running
+                onClicked: dialog.close()
+            }
         }
     }
     Connections {

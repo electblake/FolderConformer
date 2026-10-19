@@ -6,7 +6,7 @@ A basic Windows Qt Quick application for moving files into folders using an orde
 
 Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Start moving files**. By default, file rules process direct files and folder rules process direct subfolders. Enable subdirectories to include nested files and folders.
 
-Choose **Help > Extras > Install in File Explorer** to add **Open in FolderConformer** to right-click menus for folders, folder backgrounds, and drives for your Windows account. Explorer opens the selected directory in the folder field without starting processing. Reinstalling updates the same menu entries.
+Choose **Help > Install for File Explorer**, then **Install**, to add **Open in FolderConformer** to right-click menus for folders, folder backgrounds, and drives for your Windows account. Explorer opens the selected directory in the folder field without starting processing. Reinstalling updates the same menu entries.
 
 - **Landscape and square media:** ffprobe reads the first video/image stream. Display dimensions account for sample aspect ratio and rotation. Media with width/height ≥ 1 goes into the configured folder (default `Landscape-FULL`).
 - **Extension:** files go into lowercase final-extension folders, such as `txt` or `png`. Files without an extension go into `no-extension`.

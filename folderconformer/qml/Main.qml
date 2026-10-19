@@ -15,8 +15,8 @@ ApplicationWindow {
         close.accepted = !window.controller.running && !window.controller.updates.busy
         if (close.accepted && updateLoader.status === Loader.Ready)
             updateLoader.item.close()
-        if (close.accepted && extrasLoader.status === Loader.Ready)
-            extrasLoader.item.close()
+        if (close.accepted && installExplorerLoader.status === Loader.Ready)
+            installExplorerLoader.item.close()
     }
 
     menuBar: MenuBar {
@@ -39,14 +39,14 @@ ApplicationWindow {
         Menu {
             title: qsTr("Help")
             MenuItem {
-                objectName: "extrasMenu"
-                text: qsTr("Extras")
+                objectName: "installExplorerMenu"
+                text: qsTr("Install for File Explorer")
                 enabled: !window.controller.running && !window.controller.updates.busy
                 onTriggered: {
-                    extrasLoader.active = true
-                    if (extrasLoader.status === Loader.Ready) {
-                        extrasLoader.item.show()
-                        extrasLoader.item.requestActivate()
+                    installExplorerLoader.active = true
+                    if (installExplorerLoader.status === Loader.Ready) {
+                        installExplorerLoader.item.show()
+                        installExplorerLoader.item.requestActivate()
                     }
                 }
             }
@@ -67,10 +67,10 @@ ApplicationWindow {
     }
 
     Loader {
-        id: extrasLoader
+        id: installExplorerLoader
         active: false
         sourceComponent: Component {
-            Extras {
+            InstallExplorer {
                 controller: window.controller
                 transientParent: window
             }
