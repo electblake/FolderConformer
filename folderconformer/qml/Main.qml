@@ -21,6 +21,22 @@ ApplicationWindow {
 
     menuBar: MenuBar {
         Menu {
+            title: qsTr("&File")
+            MenuItem {
+                objectName: "selectFolderMenu"
+                text: qsTr("Select Folder..")
+                enabled: !window.controller.running && !window.controller.updates.busy
+                onTriggered: conformerScreen.choosingFolder = true
+            }
+            MenuSeparator {}
+            MenuItem {
+                objectName: "quitMenu"
+                text: qsTr("&Quit")
+                enabled: !window.controller.running && !window.controller.updates.busy
+                onTriggered: window.close()
+            }
+        }
+        Menu {
             title: qsTr("Help")
             MenuItem {
                 objectName: "extrasMenu"
@@ -77,6 +93,7 @@ ApplicationWindow {
     }
 
     ConformerScreen {
+        id: conformerScreen
         anchors.fill: parent
         controller: window.controller
         enabled: !window.controller.updates.busy

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added File > Select Folder.. to set the input folder through the existing picker, followed by a divider and Quit.
+
 ## [0.4.1] - 2026-10-19
 
 ### Added

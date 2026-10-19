@@ -6,6 +6,7 @@ Pane {
     id: screen
     objectName: "conformerScreen"
     required property QtObject controller
+    property alias choosingFolder: folderPanel.choosing
     property string status: qsTr("Ready")
     property string completionSummary: ""
     property int processed: 0
@@ -27,6 +28,7 @@ Pane {
                 width: settingsScroll.availableWidth
                 spacing: 12
                 FolderPanel {
+                    id: folderPanel
                     Layout.fillWidth: true
                     controller: screen.controller
                     enabled: !screen.controller.running

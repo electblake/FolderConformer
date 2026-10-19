@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QEvent, QEventLoop, QObject, QPointF, QSettings, QTimer, Qt, QUrl
+from PySide6.QtCore import QEvent, QEventLoop, QMetaObject, QObject, QPointF, QSettings, QTimer, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QKeyEvent
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -273,3 +273,51 @@ class SettingsUiTests(unittest.TestCase):
         self.assertTrue(Controller().includeSubdirectories)
         self.assertEqual(messages, [])
         window.close()
+
+    def test_file_menu_selects_input_folder_and_quits(self):
+        APP.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
+        self.addCleanup(lambda: APP.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False))
+        controller = Controller()
+        engine = QQmlApplicationEngine()
+        messages = []
+        engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        select = window.findChild(QObject, "selectFolderMenu")
+        quit_menu = window.findChild(QObject, "quitMenu")
+        screen = window.findChild(QObject, "conformerScreen")
+        controller.updates._busy = True
+        controller.updates.changed.emit()
+        self.assertFalse(select.property("enabled"))
+        self.assertFalse(quit_menu.property("enabled"))
+        controller.updates._busy = False
+        controller.updates.changed.emit()
+        self.assertTrue(select.property("enabled"))
+        self.assertTrue(quit_menu.property("enabled"))
+        QMetaObject.invokeMethod(select, "triggered")
+        APP.processEvents()
+        dialog = next(child for child in window.findChildren(QObject)
+                      if child.property("title") == "Select input folder")
+        QMetaObject.invokeMethod(dialog, "reject")
+        APP.processEvents()
+        APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.assertFalse(screen.property("choosingFolder"))
+        self.assertEqual(controller.folder, "")
+        QMetaObject.invokeMethod(select, "triggered")
+        APP.processEvents()
+        dialog = next(child for child in window.findChildren(QObject)
+                      if child.property("title") == "Select input folder")
+        folder = Path(self.temporary.name) / "日本語 é"
+        folder.mkdir()
+        dialog.setProperty("selectedFolder", QUrl.fromLocalFile(str(folder)))
+        QMetaObject.invokeMethod(dialog, "accept")
+        APP.processEvents()
+        self.assertFalse(screen.property("choosingFolder"))
+        self.assertEqual(Path(controller.folder), folder)
+        self.assertEqual(window.findChild(QObject, "inputFolder").property("text"), controller.folder)
+        self.assertEqual(Controller().folder, controller.folder)
+        QMetaObject.invokeMethod(quit_menu, "triggered")
+        APP.processEvents()
+        self.assertFalse(window.isVisible())
+        self.assertEqual(messages, [])
