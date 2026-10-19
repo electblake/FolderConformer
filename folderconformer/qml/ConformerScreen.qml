@@ -92,6 +92,18 @@ Pane {
                 Accessible.name: qsTr("Processing log")
             }
         }
+        RowLayout {
+            Layout.fillWidth: true
+            Item { Layout.fillWidth: true }
+            Button {
+                objectName: "copyOutput"
+                text: qsTr("Copy Output")
+                onClicked: {
+                    log.selectAll()
+                    log.copy()
+                }
+            }
+        }
     }
     Connections {
         target: screen.controller
