@@ -5,12 +5,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from PySide6.QtGui import QGuiApplication
 from static_ffmpeg.run import get_platform_dir
 
-from folderconformer.pipeline import conform, is_landscape
+from folderconformer.pipeline import RunControl, conform, is_landscape
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -269,3 +270,25 @@ class PipelineTests(unittest.TestCase):
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
         self.assertEqual((folder / "txt/é.txt").read_text(), "preserved")
+
+    def test_stop_after_file_rules_preserves_later_files(self):
+        (self.folder / "a.txt").write_text("a")
+        (self.folder / "b.txt").write_text("b")
+        control = RunControl()
+        with patch("sys.stdin", io.StringIO("continue\nstop\n")), contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, [{"id": "extension", "enabled": True}], "Wide", FFPROBE,
+                    *FOLDER_FILES, control=control)
+        self.assertTrue(control.stopped)
+        self.assertTrue((self.folder / "txt/a.txt").is_file())
+        self.assertTrue((self.folder / "b.txt").is_file())
+
+    def test_stop_between_folder_rules(self):
+        (self.folder / "Images").mkdir()
+        (self.folder / "Videos").mkdir()
+        control = RunControl()
+        rules = [{"id": name, "enabled": True} for name in ("rename_images", "rename_videos")]
+        with patch("sys.stdin", io.StringIO("continue\nstop\n")), contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, rules, "Wide", FFPROBE, *FOLDER_FILES, control=control)
+        self.assertTrue(control.stopped)
+        self.assertTrue((self.folder / "photo").is_dir())
+        self.assertTrue((self.folder / "Videos").is_dir())

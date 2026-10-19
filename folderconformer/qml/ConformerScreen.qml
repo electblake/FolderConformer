@@ -16,6 +16,12 @@ Pane {
         anchors.fill: parent
         spacing: 12
 
+        FolderPanel {
+            id: folderPanel
+            Layout.fillWidth: true
+            controller: screen.controller
+            enabled: !screen.controller.running
+        }
         ScrollView {
             id: settingsScroll
             objectName: "settingsScroll"
@@ -27,12 +33,6 @@ Pane {
             ColumnLayout {
                 width: settingsScroll.availableWidth
                 spacing: 12
-                FolderPanel {
-                    id: folderPanel
-                    Layout.fillWidth: true
-                    controller: screen.controller
-                    enabled: !screen.controller.running
-                }
                 RulesPanel {
                     Layout.fillWidth: true
                     controller: screen.controller
@@ -57,18 +57,41 @@ Pane {
                 : qsTr("File rules process files directly in this folder. Folder rules rename or move its immediate subfolders.")
             wrapMode: Text.WordWrap
         }
-        Button {
-            text: qsTr("Start moving files")
-            enabled: !screen.controller.running && screen.controller.folder.length > 0
-                && (!screen.controller.rules.some(rule => rule.id === "landscape" && rule.enabled)
-                    || screen.controller.landscapeFolder.length > 0)
-            onClicked: {
-                log.clear()
-                screen.completionSummary = ""
-                screen.processed = 0
-                screen.total = 0
-                screen.status = qsTr("Processing…")
-                screen.controller.start()
+        RowLayout {
+            Button {
+                text: qsTr("Start moving files")
+                enabled: !screen.controller.running && screen.controller.folder.length > 0
+                    && (!screen.controller.rules.some(rule => rule.id === "landscape" && rule.enabled)
+                        || screen.controller.landscapeFolder.length > 0)
+                onClicked: {
+                    log.clear()
+                    screen.completionSummary = ""
+                    screen.processed = 0
+                    screen.total = 0
+                    screen.status = qsTr("Processing…")
+                    screen.controller.start()
+                }
+            }
+            Button {
+                objectName: "pauseProcessing"
+                text: screen.controller.runState === "paused" || screen.controller.runState === "pausing"
+                    ? qsTr("Resume") : qsTr("Pause")
+                enabled: screen.controller.running && screen.controller.runState !== "stopping"
+                    && screen.controller.runState !== "cancelling"
+                onClicked: screen.controller.pause()
+            }
+            Button {
+                objectName: "stopProcessing"
+                text: qsTr("Stop")
+                enabled: screen.controller.running && screen.controller.runState !== "stopping"
+                    && screen.controller.runState !== "cancelling"
+                onClicked: screen.controller.stop()
+            }
+            Button {
+                objectName: "cancelProcessing"
+                text: qsTr("Cancel")
+                enabled: screen.controller.running && screen.controller.runState !== "cancelling"
+                onClicked: screen.controller.cancel()
             }
         }
         ProgressBar {
@@ -79,7 +102,13 @@ Pane {
             value: screen.processed
             visible: screen.controller.running
         }
-        Label { text: screen.status }
+        Label {
+            text: screen.controller.runState === "pausing" ? qsTr("Pausing after current rules…")
+                : screen.controller.runState === "paused" ? qsTr("Paused")
+                : screen.controller.runState === "stopping" ? qsTr("Stopping after current rules…")
+                : screen.controller.runState === "cancelling" ? qsTr("Cancelling…")
+                : screen.status
+        }
         ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -110,7 +139,9 @@ Pane {
         function onOutput(text) { log.insert(log.length, text) }
         function onCompletionSummary(text) { screen.completionSummary = text }
         function onCompleted(code) {
-            screen.status = code === 0 ? qsTr("Complete: %1").arg(screen.completionSummary) : qsTr("Process exited with code %1. See log.").arg(code)
+            screen.status = screen.controller.runState === "cancelled" ? qsTr("Cancelled")
+                : screen.controller.runState === "stopped" ? qsTr("Stopped: %1").arg(screen.completionSummary)
+                : code === 0 ? qsTr("Complete: %1").arg(screen.completionSummary) : qsTr("Process exited with code %1. See log.").arg(code)
         }
         function onProgress(current, total, seconds) {
             screen.processed = current

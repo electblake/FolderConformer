@@ -35,8 +35,9 @@ class SettingsUiTests(unittest.TestCase):
             item = pending.pop()
             if item.objectName() == name:
                 scroll = window.findChild(QObject, "settingsScroll").property("contentItem")
-                position = item.mapToScene(QPointF(0, 0))
-                scroll.setProperty("contentY", max(0, scroll.property("contentY") + position.y() - 100))
+                if scroll.isAncestorOf(item):
+                    position = item.mapToItem(scroll, QPointF(0, 0))
+                    scroll.setProperty("contentY", max(0, scroll.property("contentY") + position.y()))
                 APP.processEvents()
                 return item
             pending.extend(item.childItems())
@@ -321,3 +322,51 @@ class SettingsUiTests(unittest.TestCase):
         APP.processEvents()
         self.assertFalse(window.isVisible())
         self.assertEqual(messages, [])
+
+    def test_processing_pause_resume_stop_and_cancel(self):
+        for action in ("resume", "stop", "cancel"):
+            with self.subTest(action=action):
+                folder = Path(self.temporary.name) / action
+                folder.mkdir()
+                (folder / "note.txt").write_text("content")
+                controller = Controller()
+                controller.folder = str(folder)
+                controller._rules = [{"id": "extension", "enabled": True}]
+                engine = QQmlApplicationEngine()
+                engine.setInitialProperties({"controller": controller})
+                engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+                window = engine.rootObjects()[0]
+                buttons = [window.findChild(QObject, name) for name in
+                           ("pauseProcessing", "stopProcessing", "cancelProcessing")]
+                self.assertTrue(all(not button.property("enabled") for button in buttons))
+                loop = QEventLoop()
+                controller.runStateChanged.connect(lambda: loop.quit() if controller.runState == "paused" else None)
+                controller.start()
+                controller.pause()
+                QTimer.singleShot(5000, loop.quit)
+                loop.exec()
+                self.assertEqual(controller.runState, "paused")
+                self.assertTrue(controller.running)
+                self.assertTrue((folder / "note.txt").is_file())
+                self.assertEqual(buttons[0].property("text"), "Resume")
+                self.assertTrue(all(button.property("enabled") for button in buttons))
+                results = []
+                controller.completed.connect(lambda code: (results.append(code), loop.quit()))
+                if action == "resume":
+                    controller.pause()
+                elif action == "stop":
+                    controller.stop()
+                else:
+                    controller.cancel()
+                QTimer.singleShot(5000, loop.quit)
+                loop.exec()
+                self.assertEqual(len(results), 1)
+                self.assertFalse(controller.running)
+                self.assertTrue(all(not button.property("enabled") for button in buttons))
+                if action == "resume":
+                    self.assertEqual(results, [0])
+                    self.assertTrue((folder / "txt/note.txt").is_file())
+                else:
+                    self.assertEqual(controller.runState, "stopped" if action == "stop" else "cancelled")
+                    self.assertTrue((folder / "note.txt").is_file())
+                window.close()

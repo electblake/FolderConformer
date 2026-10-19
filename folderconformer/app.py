@@ -18,6 +18,7 @@ from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 class Controller(QObject):
     configurationChanged = Signal()
     runningChanged = Signal()
+    runStateChanged = Signal()
     output = Signal(str)
     completed = Signal(int)
     progress = Signal(int, int, int)
@@ -27,6 +28,8 @@ class Controller(QObject):
     def __init__(self, folder=None):
         super().__init__()
         self._updates = Updates(self)
+        self._run_state = ""
+        self._waiting = False
         settings_path = user_config_path("FolderConformer", appauthor=False) / "FolderConformer.ini"
         self.location_settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
         self.location_settings.setFallbacksEnabled(False)
@@ -160,6 +163,35 @@ class Controller(QObject):
     def running(self):
         return self.process.state() != QProcess.ProcessState.NotRunning
 
+    @Property(str, notify=runStateChanged)
+    def runState(self):
+        return self._run_state
+
+    @Slot()
+    def pause(self):
+        if self._run_state in ("pausing", "paused"):
+            self._run_state = ""
+            if self._waiting:
+                self.process.write(b"continue\n")
+                self._waiting = False
+        else:
+            self._run_state = "pausing"
+        self.runStateChanged.emit()
+
+    @Slot()
+    def stop(self):
+        self._run_state = "stopping"
+        if self._waiting:
+            self.process.write(b"stop\n")
+            self._waiting = False
+        self.runStateChanged.emit()
+
+    @Slot()
+    def cancel(self):
+        self._run_state = "cancelling"
+        self.runStateChanged.emit()
+        self.process.kill()
+
     @Slot(QUrl)
     def selectFolder(self, url):
         self.folder = url.toLocalFile()
@@ -186,8 +218,12 @@ class Controller(QObject):
 
     @Slot()
     def start(self):
+        self._run_state = ""
+        self._waiting = False
+        self.runStateChanged.emit()
         arguments = ["--worker", self._folder, json.dumps(self._rules), self._landscape_folder,
-                     self._video_folder, self._image_folder, self._video_extensions, self._image_extensions]
+                     self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
+                     "--controlled"]
         if self._include_subdirectories:
             arguments.append("--recursive")
         self._launch("conform", arguments)
@@ -209,11 +245,21 @@ class Controller(QObject):
     @Slot()
     def read_output(self):
         text = self.decoder.decode(bytes(self.process.readAllStandardOutput()))
-        self.output.emit(text)
         self.pending += text
         lines = self.pending.split("\n")
         self.pending = lines.pop()
         for line in lines:
+            if line.rstrip("\r") == "Control: ready":
+                if self._run_state in ("pausing", "paused"):
+                    self._waiting = True
+                    self._run_state = "paused"
+                    self.runStateChanged.emit()
+                elif self._run_state == "stopping":
+                    self.process.write(b"stop\n")
+                elif self._run_state != "cancelling":
+                    self.process.write(b"continue\n")
+                continue
+            self.output.emit(line + "\n")
             if line.startswith("Completed: "):
                 self.completionSummary.emit(line.removeprefix("Completed: ").rstrip("\r"))
             match = re.match(r"^\[(\d+)/(\d+)\] ", line)
@@ -224,10 +270,13 @@ class Controller(QObject):
 
     def finished(self, code, _status):
         self.read_output()
-        self.output.emit(self.decoder.decode(b"", final=True))
+        self.output.emit(self.pending + self.decoder.decode(b"", final=True))
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
         else:
+            self._waiting = False
+            self._run_state = "cancelled" if self._run_state == "cancelling" else "stopped" if code == 2 else ""
+            self.runStateChanged.emit()
             self.completed.emit(code)
 
 
@@ -244,11 +293,13 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
-        from folderconformer.pipeline import conform
+        from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
+        control = RunControl() if "--controlled" in sys.argv[9:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
-                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:])
-        return 0
+                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:],
+                control=control)
+        return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     engine = QQmlApplicationEngine()
     engine.setInitialProperties({"controller": controller})

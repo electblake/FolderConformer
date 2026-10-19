@@ -1,11 +1,22 @@
 import json
 import os
 import subprocess
+import sys
 from fractions import Fraction
 from itertools import groupby
 from pathlib import Path
 
 from PySide6.QtCore import QMimeDatabase
+
+
+class RunControl:
+    def __init__(self):
+        self.stopped = False
+
+    def checkpoint(self):
+        print("Control: ready", flush=True)
+        self.stopped = sys.stdin.readline().strip() == "stop"
+        return not self.stopped
 
 
 def is_landscape(path: Path, ffprobe: Path) -> bool:
@@ -28,18 +39,22 @@ def is_landscape(path: Path, ffprobe: Path) -> bool:
 
 def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path,
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
-            recursive: bool = False):
+            recursive: bool = False, control=None):
     video_suffixes = {extension.strip().lstrip(".").lower() for extension in video_extensions.split(";") if extension.strip()}
     image_suffixes = {extension.strip().lstrip(".").lower() for extension in image_extensions.split(";") if extension.strip()}
     files_processed = files_moved = folders_renamed = folders_moved = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for file_rules, group in groupby(enabled_rules, key=lambda rule: rule["id"] in ("landscape", "extension")):
         if file_rules:
-            processed, moved = conform_files(folder, list(group), landscape_folder, ffprobe, recursive)
+            processed, moved = conform_files(folder, list(group), landscape_folder, ffprobe, recursive, control)
             files_processed += processed
             files_moved += moved
+            if control is not None and control.stopped:
+                break
             continue
         for rule in group:
+            if control is not None and not control.checkpoint():
+                break
             directories = [folder]
             if recursive:
                 pending = [folder]
@@ -82,11 +97,14 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     folders_moved += 1
                     action = "Moved folder"
                 print(f"[{index}/{len(moves)}] {action}: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+        if control is not None and control.stopped:
+            break
     print(f"Completed: {files_processed} files processed, {files_moved} files moved, "
           f"{folders_renamed} folders renamed, {folders_moved} folders moved.", flush=True)
 
 
-def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, recursive: bool = False):
+def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, recursive: bool = False,
+                  control=None):
     files = []
     print(f"Scanning {folder}", flush=True)
     directories = [folder]
@@ -104,8 +122,11 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
     files.sort()
     print(f"Found {len(files)} files", flush=True)
     moved = 0
+    processed = 0
     mime_database = QMimeDatabase()
     for index, source in enumerate(files, 1):
+        if control is not None and not control.checkpoint():
+            break
         destination = folder
         for rule in rules:
             if not rule["enabled"]:
@@ -125,4 +146,5 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
             moved += 1
             print(f"{source.name} → {target.relative_to(folder)}", flush=True)
         print(f"[{index}/{len(files)}] {source.name}", flush=True)
-    return len(files), moved
+        processed += 1
+    return processed, moved
