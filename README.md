@@ -1,3 +1,5 @@
+<img src="assets/blue/logotype-eng-style.png" alt="FolderConformer" width="640" style="max-width: 640px; width: 100%; height: auto;">
+
 # FolderConformer
 
 A basic Windows Qt Quick application for moving files into folders using an ordered rule pipeline. All controls use the standard Qt appearance.
@@ -44,7 +46,7 @@ $env:ISCC_PATH = 'C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
 mise run build
 ```
 
-The build compiles `dist/installer/FolderConformer-0.3.0-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
+The build compiles `dist/installer/FolderConformer-0.4.1-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
 
 `platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
 

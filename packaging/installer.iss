@@ -15,7 +15,8 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist\installer
 OutputBaseFilename={#MyAppName}-{#MyAppVersion}-{#MyAppPlatform}-{#MyAppMachine}-Setup
-UninstallDisplayIcon={localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe
+SetupIconFile=..\folderconformer\FolderConformer.ico
+UninstallDisplayIcon={app}\source\folderconformer\FolderConformer.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -37,8 +38,8 @@ Source: "licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\source"

@@ -9,7 +9,7 @@ from pathlib import Path
 from platformdirs import user_config_path
 from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QObject, Property, QProcess, QProcessEnvironment, QSettings, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices, QGuiApplication
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
@@ -236,6 +236,7 @@ def main():
     app.setOrganizationName("FolderConformer")
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "FolderConformer.ico")))
     if len(sys.argv) > 1 and sys.argv[1] == "--install-explorer":
         sys.stdout.reconfigure(encoding="utf-8")
         from folderconformer.integrations import install

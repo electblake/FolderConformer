@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-19
+
+### Added
+
+- Added blue and pink icons and logotypes in engineering and casual styles.
+
+### Changed
+
+- Applied the blue engineering icon to the application, Explorer integration, installer, uninstall entry, and shortcuts.
+- Added the blue engineering logotype to the README with a maximum width of 640 pixels.
+
 ## [0.4.0] - 2026-10-19
 
 ### Added
