@@ -1,6 +1,6 @@
 [project]
 name = "folderconformer"
-version = "0.3.0"
+version = "0.4.0"
 description = "Organize a folder with ordered media and extension rules."
 requires-python = ">=3.12"
 dependencies = [
@@ -20,4 +20,4 @@ build-backend = "setuptools.build_meta"
 packages = ["folderconformer"]
 
 [tool.setuptools.package-data]
-folderconformer = ["qml/*.qml"]
+folderconformer = ["qml/*.qml", "*.ico"]

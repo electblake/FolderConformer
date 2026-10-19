@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-19
+
 ### Added
 
+- Added Help > Check for updates.. with a window-modal Software Update dialog, GitHub Releases checks, installer downloads, and explicit quit-and-install.
+- Added updater checks for numeric version ordering, exact installer selection, responsive networking, progress and button states, blocked busy dismissal, and installation after shutdown.
+- Added Help > Extras with per-user File Explorer installation for folders, folder backgrounds, and drives, opening the selected folder without starting processing.
 - Added Folders controls for landscape, video, image, and user configuration folders, with Browse and Open actions for the configuration folder.
 - Added Files controls for semicolon-separated video and image extension lists, initialized with the existing extension lists.
 
 ### Changed
 
+- Matched installer filenames to the updater's platform and architecture lookup while retaining the existing installation identity and location.
 - Sourced folder-rule destinations and extension matches from the saved controls and reflected destination changes in rule labels.
 - Saved the new controls through QSettings and retained the selected configuration location across restarts.
 - Made the settings groups scroll while keeping processing controls and the log visible.

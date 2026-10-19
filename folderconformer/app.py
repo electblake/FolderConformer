@@ -1,9 +1,9 @@
 import codecs
 import json
 import math
+import os
 import re
 import sys
-from importlib.metadata import version
 from pathlib import Path
 
 from platformdirs import user_config_path
@@ -11,6 +11,8 @@ from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QObject, Property, QProcess, QProcessEnvironment, QSettings, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
+
+from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
 
 class Controller(QObject):
@@ -20,9 +22,11 @@ class Controller(QObject):
     completed = Signal(int)
     progress = Signal(int, int, int)
     completionSummary = Signal(str)
+    explorerCompleted = Signal(int)
 
-    def __init__(self):
+    def __init__(self, folder=None):
         super().__init__()
+        self._updates = Updates(self)
         settings_path = user_config_path("FolderConformer", appauthor=False) / "FolderConformer.ini"
         self.location_settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
         self.location_settings.setFallbacksEnabled(False)
@@ -43,6 +47,8 @@ class Controller(QObject):
                 "landscape", "extension", "rename_images", "rename_videos", "photo_extensions", "video_extensions",
             )]), type=str
         ))
+        if folder is not None:
+            self.folder = folder
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         environment = QProcessEnvironment.systemEnvironment()
@@ -52,6 +58,10 @@ class Controller(QObject):
         self.process.stateChanged.connect(self.runningChanged)
         self.process.finished.connect(self.finished)
         self.process.errorOccurred.connect(lambda _: self.output.emit(self.process.errorString()))
+
+    @Property(QObject, constant=True)
+    def updates(self):
+        return self._updates
 
     def save(self):
         self.settings.setValue("folder", self._folder)
@@ -176,14 +186,22 @@ class Controller(QObject):
 
     @Slot()
     def start(self):
-        self.decoder = codecs.getincrementaldecoder("utf-8")()
-        self.pending = ""
-        self.timer = QElapsedTimer()
-        self.timer.start()
         arguments = ["--worker", self._folder, json.dumps(self._rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions]
         if self._include_subdirectories:
             arguments.append("--recursive")
+        self._launch("conform", arguments)
+
+    @Slot()
+    def installExplorer(self):
+        self._launch("explorer", ["--install-explorer"])
+
+    def _launch(self, kind, arguments):
+        self._kind = kind
+        self.decoder = codecs.getincrementaldecoder("utf-8")()
+        self.pending = ""
+        self.timer = QElapsedTimer()
+        self.timer.start()
         self.process.setProgram(str(Path(sys.executable).with_name("python.exe")))
         self.process.setArguments(["-I", "-m", "folderconformer", *arguments])
         self.process.start()
@@ -207,14 +225,21 @@ class Controller(QObject):
     def finished(self, code, _status):
         self.read_output()
         self.output.emit(self.decoder.decode(b"", final=True))
-        self.completed.emit(code)
+        if self._kind == "explorer":
+            self.explorerCompleted.emit(code)
+        else:
+            self.completed.emit(code)
 
 
 def main():
     app = QGuiApplication(sys.argv)
     app.setOrganizationName("FolderConformer")
-    app.setApplicationName("FolderConformer")
-    app.setApplicationVersion(version("folderconformer"))
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(APP_VERSION)
+    if len(sys.argv) > 1 and sys.argv[1] == "--install-explorer":
+        sys.stdout.reconfigure(encoding="utf-8")
+        from folderconformer.integrations import install
+        return install()
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
@@ -223,9 +248,13 @@ def main():
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:])
         return 0
-    controller = Controller()
+    controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     engine = QQmlApplicationEngine()
     engine.setInitialProperties({"controller": controller})
     engine.objectCreationFailed.connect(lambda: app.exit(1))
     engine.load(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "Main.qml")))
-    return app.exec()
+    result = app.exec()
+    window = engine.rootObjects()[0]
+    if window.property("pending_installer") is not None:
+        os.startfile(window.property("pending_installer"))
+    return result

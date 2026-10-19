@@ -4,6 +4,8 @@ A basic Windows Qt Quick application for moving files into folders using an orde
 
 Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Start moving files**. By default, file rules process direct files and folder rules process direct subfolders. Enable subdirectories to include nested files and folders.
 
+Choose **Help > Extras > Install in File Explorer** to add **Open in FolderConformer** to right-click menus for folders, folder backgrounds, and drives for your Windows account. Explorer opens the selected directory in the folder field without starting processing. Reinstalling updates the same menu entries.
+
 - **Landscape and square media:** ffprobe reads the first video/image stream. Display dimensions account for sample aspect ratio and rotation. Media with width/height ≥ 1 goes into the configured folder (default `Landscape-FULL`).
 - **Extension:** files go into lowercase final-extension folders, such as `txt` or `png`. Files without an extension go into `no-extension`.
 
@@ -42,7 +44,7 @@ $env:ISCC_PATH = 'C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
 mise run build
 ```
 
-The build compiles `dist/installer/FolderConformer-Windows-Online-Setup-0.3.0.exe` from app source, QML, and the lockfile. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
+The build compiles `dist/installer/FolderConformer-0.3.0-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
 
 `platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
 

@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import subprocess
 import tempfile
 import tomllib
@@ -11,7 +12,9 @@ from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
 
 root = Path(__file__).resolve().parent.parent
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-installer = root / "dist/installer" / f"FolderConformer-Windows-Online-Setup-{version}.exe"
+installer = root / "dist/installer" / (
+    f"FolderConformer-{version}-{platform.system().lower()}-{platform.machine().lower()}-Setup.exe"
+)
 runtime = user_data_path("FolderConformer", appauthor=False) / "runtime"
 assert not runtime.exists(), runtime
 assert installer.stat().st_size < 5_000_000
@@ -37,6 +40,9 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
         str(python), "-I", "-c", "from importlib.metadata import version; print(version('folderconformer'))",
     ], env=environment, check=True, capture_output=True, text=True).stdout.strip()
     assert installed_version == version
+    subprocess.run([
+        str(python), "-I", str(root / "tests/test_integrations.py"), "-v",
+    ], env=environment, cwd=work, check=True)
     media = work / "日本語 media"
     media.mkdir()
     for directory, filename in (("images", "photo.bin"), ("videos", "video.bin"),
@@ -72,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     process.start(str(pythonw), ["-I", "-m", "folderconformer"])
     assert process.waitForStarted(10000)
     assert not process.waitForFinished(1800), bytes(process.readAllStandardError()).decode("utf-8")
-    process.terminate()
+    subprocess.run(["taskkill", "/PID", str(process.processId()), "/T", "/F"], check=True, stdout=subprocess.PIPE)
     process.waitForFinished(10000)
     assert not bytes(process.readAllStandardError())
     subprocess.run([*command, f"/LOG={root / 'build/online-reinstall.log'}"], env=setup_environment, check=True)
