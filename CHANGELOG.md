@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-19
+
+### Added
+
+- Added the MIT license and included it in the installed application and Python package.
+- Added the standard Inno Setup license agreement page requiring acceptance during interactive installation.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added

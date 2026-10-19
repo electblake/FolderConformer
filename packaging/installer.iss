@@ -20,11 +20,14 @@ UninstallDisplayIcon={app}\source\folderconformer\FolderConformer.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile=..\LICENSE
 CloseApplications=yes
 SetupLogging=yes
 ArchiveExtraction=full
 
 [Files]
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}\source"; Flags: ignoreversion
 Source: "https://github.com/astral-sh/uv/releases/download/0.11.11/uv-x86_64-pc-windows-msvc.zip"; DestDir: "{app}\tools"; DestName: "uv.zip"; ExternalSize: 68454400; Hash: "2f75a0db2c3530b6b3c24434dc38137f61ff1f4e5f2d7b4ddc5bcd142cf58b65"; Flags: external download extractarchive ignoreversion recursesubdirs createallsubdirs
 Source: "..\folderconformer\*.py"; DestDir: "{app}\source\folderconformer"; Flags: ignoreversion
 Source: "..\folderconformer\*.ico"; DestDir: "{app}\source\folderconformer"; Flags: ignoreversion
