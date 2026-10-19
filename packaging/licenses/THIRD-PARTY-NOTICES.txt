@@ -21,3 +21,6 @@ included in the bundle. These libraries may be replaced by compatible versions.
 Python: https://docs.python.org/3/license.html
 PyInstaller bootloader: GPL with exception permitting bundled applications.
 https://pyinstaller.org/en/stable/license.html
+
+qt-themes 0.4.1 (MIT): https://github.com/beatreichenbach/qt-themes
+See qt-themes-LICENSE.txt.
