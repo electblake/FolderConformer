@@ -9,12 +9,13 @@ from unittest.mock import MagicMock, patch
 from PySide6.QtCore import QMetaObject, QObject, QThread, QTimer, Qt, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 
 from folderconformer import app, updates
 
 
-APP = QGuiApplication.instance() or QGuiApplication([])
+APP = QApplication.instance() or QApplication([])
 
 
 class UpdateTests(unittest.TestCase):
@@ -54,6 +55,7 @@ class UpdateTests(unittest.TestCase):
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(app.__file__).parent / "qml/Main.qml")))
         window = engine.rootObjects()[0]
+        window.quitRequested.connect(window.close)
         self.addCleanup(lambda: (window.close(), engine.clearComponentCache()))
         menu = window.findChild(QObject, "checkForUpdatesMenu")
         self.assertEqual(menu.property("text"), "Check for updates..")
@@ -238,11 +240,12 @@ class UpdateTests(unittest.TestCase):
     def test_bootstrap_launches_only_after_event_loop_returns(self):
         for installer in (None, "C:/cache/installer.exe"):
             events = []
+            self.enterContext(patch.object(app, "MainWindow"))
             application = MagicMock()
             application.exec.side_effect = lambda: (events.append("event loop returned"), 42)[1]
             engine = MagicMock()
             engine.rootObjects.return_value[0].property.return_value = installer
-            with patch("folderconformer.app.QGuiApplication", return_value=application), patch(
+            with patch("folderconformer.app.QApplication", return_value=application), patch(
                 "folderconformer.app.QQmlApplicationEngine", return_value=engine,
             ), patch("folderconformer.app.Controller", return_value=MagicMock(theme="", restart_requested=False)), patch("folderconformer.app.sys.argv", ["folderconformer"]), patch(
                 "folderconformer.app.os.startfile", side_effect=lambda path: events.append(path),
@@ -252,12 +255,13 @@ class UpdateTests(unittest.TestCase):
                 self.assertEqual(launch.call_count, int(installer is not None))
 
     def test_restart_launches_after_event_loop_returns(self):
+        self.enterContext(patch.object(app, "MainWindow"))
         events = []
         application = MagicMock()
         application.exec.side_effect = lambda: (events.append("quit"), 0)[1]
         engine = MagicMock()
         engine.rootObjects.return_value[0].property.return_value = None
-        with patch.object(app, "QGuiApplication", return_value=application), patch.object(
+        with patch.object(app, "QApplication", return_value=application), patch.object(
             app, "QQmlApplicationEngine", return_value=engine,
         ), patch.object(app, "Controller", return_value=MagicMock(theme="", restart_requested=True)), patch.object(
             app.sys, "argv", ["folderconformer"],

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved all three destination folder controls out of the Folders field group into a native, movable Qt dock widget, initially docked on the right.
+- Added View > Folders to hide or reopen the dock and preserved automatic settings, destination validation, themes, and processing/update locks.
+
 ## [0.5.4] - 2026-10-19
 
 ### Changed

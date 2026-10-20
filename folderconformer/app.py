@@ -10,10 +10,11 @@ from pathlib import Path
 import qt_themes
 from platformdirs import user_config_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QObject, Property, QProcess, QProcessEnvironment, QSettings, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette
+from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtWidgets import QApplication, QDockWidget, QFormLayout, QLineEdit, QMainWindow, QScrollArea, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
@@ -312,8 +313,68 @@ class Controller(QObject):
             self.completed.emit(code)
 
 
+class MainWindow(QMainWindow):
+    def __init__(self, controller, quick_window):
+        super().__init__()
+        self.controller = controller
+        self.quick_window = quick_window
+        self.setWindowTitle(quick_window.title())
+        quick_window.windowTitleChanged.connect(self.setWindowTitle)
+        self.resize(1100, 720)
+        container = QWidget.createWindowContainer(quick_window, self)
+        container.setMinimumSize(640, 560)
+        container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCentralWidget(container)
+        self.folders_dock = QDockWidget(self.tr("Folders"), self)
+        self.folders_dock.setObjectName("foldersDock")
+        contents = QWidget()
+        form = QFormLayout(contents)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self.folder_fields = {}
+        for name, label in (("landscapeFolder", self.tr("Landscape folder name")),
+                            ("videoFolder", self.tr("Video folder")), ("imageFolder", self.tr("Image folder"))):
+            field = QLineEdit(getattr(controller, name))
+            field.setObjectName(name)
+            field.setAccessibleName(label)
+            field.textEdited.connect(lambda text, key=name: setattr(controller, key, text))
+            form.addRow(label, field)
+            self.folder_fields[name] = field
+        self.folder_fields["landscapeFolder"].setValidator(QRegularExpressionValidator(
+            QRegularExpression(r'[^<>:"/\\|?*.][^<>:"/\\|?*]*'), self))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(contents)
+        self.folders_dock.setWidget(scroll)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.folders_dock)
+        self.resizeDocks([self.folders_dock], [260], Qt.Orientation.Horizontal)
+        self.folders_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("foldersVisible", visible))
+        quick_window.foldersToggled.connect(self.folders_dock.setVisible)
+        controller.configurationChanged.connect(self.sync_folders)
+        controller.runningChanged.connect(self.sync_enabled)
+        controller.updates.changed.connect(self.sync_enabled)
+        quick_window.quitRequested.connect(self.close)
+        self.sync_enabled()
+
+    def sync_folders(self):
+        for name, field in self.folder_fields.items():
+            value = getattr(self.controller, name)
+            if field.text() != value:
+                field.setText(value)
+
+    def sync_enabled(self):
+        self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+
+    def closeEvent(self, event):
+        if self.controller.running or self.controller.updates.busy:
+            event.ignore()
+            return
+        QMetaObject.invokeMethod(self.quick_window, "closeDialogs")
+        self.folders_dock.close()
+        super().closeEvent(event)
+
+
 def main():
-    app = QGuiApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setOrganizationName("FolderConformer")
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
@@ -334,12 +395,13 @@ def main():
         return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     if controller.theme:
+        app.setStyle("Fusion")
         QQuickStyle.setStyle("Fusion")
         palette = QPalette()
         qt_themes.update_palette(palette, qt_themes.get_themes()[controller.theme])
         app.setPalette(palette)
     engine = QQmlApplicationEngine()
-    engine.setInitialProperties({"controller": controller})
+    engine.setInitialProperties({"controller": controller, "visible": False})
     engine.objectCreationFailed.connect(lambda: app.exit(1))
     engine.load(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "Main.qml")))
     if controller.theme:
@@ -350,6 +412,8 @@ def main():
                     continue
                 name = role.name[0].lower() + role.name[1:]
                 QQmlProperty.write(window, f"palette.{group.name.lower()}.{name}", palette.color(group, role))
+    host = MainWindow(controller, engine.rootObjects()[0])
+    host.show()
     result = app.exec()
     window = engine.rootObjects()[0]
     if window.property("pending_installer") is not None:

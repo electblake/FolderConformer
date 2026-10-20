@@ -5,6 +5,9 @@ ApplicationWindow {
     id: window
     required property QtObject controller
     property var pending_installer: null
+    signal quitRequested()
+    property bool foldersVisible: true
+    signal foldersToggled(bool visible)
     width: 820
     height: 720
     minimumWidth: 640
@@ -13,11 +16,15 @@ ApplicationWindow {
     title: qsTr("FolderConformer %1").arg(Qt.application.version)
     onClosing: function(close) {
         close.accepted = !window.controller.running && !window.controller.updates.busy
-        if (close.accepted && settingsLoader.status === Loader.Ready)
+        if (close.accepted)
+            closeDialogs()
+    }
+    function closeDialogs() {
+        if (settingsLoader.status === Loader.Ready)
             settingsLoader.item.close()
-        if (close.accepted && updateLoader.status === Loader.Ready)
+        if (updateLoader.status === Loader.Ready)
             updateLoader.item.close()
-        if (close.accepted && installExplorerLoader.status === Loader.Ready)
+        if (installExplorerLoader.status === Loader.Ready)
             installExplorerLoader.item.close()
     }
 
@@ -45,7 +52,17 @@ ApplicationWindow {
                 objectName: "quitMenu"
                 text: qsTr("&Quit")
                 enabled: !window.controller.running && !window.controller.updates.busy
-                onTriggered: window.close()
+                onTriggered: window.quitRequested()
+            }
+        }
+        Menu {
+            title: qsTr("&View")
+            MenuItem {
+                objectName: "foldersMenu"
+                text: qsTr("&Folders")
+                checkable: true
+                checked: window.foldersVisible
+                onTriggered: window.foldersToggled(!window.foldersVisible)
             }
         }
         Menu {
@@ -112,7 +129,7 @@ ApplicationWindow {
                 palette: window.palette
                 onInstallRequested: {
                     window.pending_installer = window.controller.updates.installerPath
-                    window.close()
+                    window.quitRequested()
                 }
             }
         }

@@ -10,12 +10,13 @@ from PySide6.QtCore import Q_ARG, QEvent, QEventLoop, QMetaObject, QObject, QPoi
 from PySide6.QtGui import QGuiApplication, QKeyEvent
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
+from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 
 from folderconformer.app import Controller
 
 
-APP = QGuiApplication.instance() or QGuiApplication([])
+APP = QApplication.instance() or QApplication([])
 APP.setOrganizationName("FolderConformerTests")
 APP.setApplicationName("FolderConformerTests")
 
@@ -259,8 +260,7 @@ class SettingsUiTests(unittest.TestCase):
         engine.load(qml)
         window = engine.rootObjects()[0]
         APP.processEvents()
-        for name, value in (("inputFolder", r"C:\media\日本語 é"), ("landscapeFolder", "Wide media é"),
-                            ("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
+        for name, value in (("inputFolder", r"C:\media\日本語 é"),
                             ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
             field = window.findChild(QObject, name)
             field.forceActiveFocus()
@@ -281,10 +281,8 @@ class SettingsUiTests(unittest.TestCase):
         restored_engine.load(qml)
         restored_window = restored_engine.rootObjects()[0]
         self.assertEqual(restored_window.findChild(QObject, "inputFolder").property("text"), r"C:\media\日本語 é")
-        self.assertEqual(restored_window.findChild(QObject, "landscapeFolder").property("text"), "Wide media é")
         self.assertEqual(Path(restored.settings.fileName()), Path(restored.configFolder) / "FolderConformer.ini")
-        for name, value in (("videoFolder", "Clips/"), ("imageFolder", "Pictures/"),
-                            ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
+        for name, value in (("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
             self.assertEqual(restored_window.findChild(QObject, name).property("text"), value)
         self.assertTrue(restored_window.findChild(QObject, "includeSubdirectories").property("checked"))
         for rule_id in rule_ids:
@@ -307,7 +305,7 @@ class SettingsUiTests(unittest.TestCase):
         APP.processEvents()
         dialog = window.findChild(QQuickWindow, "settingsDialog")
         self.assertTrue(dialog.isVisible())
-        self.assertIsNone(window.findChild(QObject, "ruleFoldersPanel").findChild(QObject, "configFolder"))
+        self.assertIsNone(window.findChild(QObject, "ruleFoldersPanel"))
         selector = dialog.findChild(QObject, "themeSelector")
         self.assertEqual(selector.property("currentText"), "blender")
         selector.setProperty("currentIndex", controller.themes.index("nord"))
@@ -357,7 +355,7 @@ from PySide6.QtCore import QMetaObject, QObject
 from PySide6.QtQml import QQmlEngine, QQmlExpression
 from PySide6.QtTest import QTest
 from folderconformer import app
-qt = app.QGuiApplication([])
+qt = app.QApplication([])
 engine = app.QQmlApplicationEngine()
 config = Path(sys.argv[1])
 theme = sys.argv[2]
@@ -377,9 +375,12 @@ def inspect():
         colors.append(QQmlExpression(QQmlEngine.contextForObject(obj), obj, expression).evaluate()[0])
     image = dialog.grabWindow()
     colors.append(image.pixelColor(0, 0).name())
+    host = next(widget for widget in qt.topLevelWidgets() if isinstance(widget, app.MainWindow))
+    colors.append(host.folders_dock.palette().window().color().name())
+    colors.append(host.folder_fields["videoFolder"].palette().base().color().name())
     window.close()
     return 0
-with patch.object(app, "QGuiApplication", return_value=qt), patch.object(app, "QQmlApplicationEngine", return_value=engine), patch.object(qt, "exec", side_effect=inspect), patch.object(sys, "argv", ["folderconformer"]):
+with patch.object(app, "QApplication", return_value=qt), patch.object(app, "QQmlApplicationEngine", return_value=engine), patch.object(qt, "exec", side_effect=inspect), patch.object(sys, "argv", ["folderconformer"]):
     app.main()
 print(json.dumps(colors))
 """
@@ -393,7 +394,8 @@ print(json.dumps(colors))
                 qt_themes.update_palette(palette, qt_themes.get_themes()[theme])
                 self.assertEqual(json.loads(result.stdout), [palette.window().color().name(),
                     palette.window().color().name(), palette.base().color().name(),
-                    palette.button().color().name(), palette.window().color().name()])
+                    palette.button().color().name(), palette.window().color().name(),
+                    palette.window().color().name(), palette.base().color().name()])
 
     def test_qml_loads(self):
         controller = Controller()
@@ -406,11 +408,11 @@ print(json.dumps(colors))
         self.assertEqual(len(engine.rootObjects()), 1)
         window = engine.rootObjects()[0]
         APP.processEvents()
-        panels = [window.findChild(QQuickItem, name) for name in ("rulesPanel", "ruleFoldersPanel", "filesPanel")]
+        panels = [window.findChild(QQuickItem, name) for name in ("rulesPanel", "filesPanel")]
         for upper, lower in zip(panels, panels[1:]):
             self.assertLessEqual(upper.y() + upper.height(), lower.y())
         for name in ("landscapeFolder", "videoFolder", "imageFolder"):
-            self.assertIsNotNone(panels[1].findChild(QObject, name))
+            self.assertIsNone(window.findChild(QObject, name))
         checkbox = window.findChild(QObject, "includeSubdirectories")
         self.assertFalse(checkbox.property("checked"))
         position = checkbox.mapToScene(QPointF(checkbox.width() / 2, checkbox.height() / 2)).toPoint()
@@ -430,6 +432,7 @@ print(json.dumps(colors))
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
+        window.quitRequested.connect(window.close)
         select = window.findChild(QObject, "selectFolderMenu")
         quit_menu = window.findChild(QObject, "quitMenu")
         screen = window.findChild(QObject, "conformerScreen")

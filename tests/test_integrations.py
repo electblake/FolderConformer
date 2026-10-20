@@ -7,13 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import QEventLoop, QMetaObject, QObject, QTimer, QUrl
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
 from folderconformer import app, integrations
 
 
-APP = QGuiApplication.instance() or QGuiApplication([])
+APP = QApplication.instance() or QApplication([])
 
 
 class IntegrationTests(unittest.TestCase):

@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QGuiApplication
 from static_ffmpeg.run import get_platform_dir
 
@@ -17,7 +18,7 @@ from folderconformer.pipeline import RunControl, conform, is_landscape
 ROOT = Path(__file__).resolve().parent.parent
 FFMPEG = Path(get_platform_dir()) / "ffmpeg.exe"
 FFPROBE = Path(get_platform_dir()) / "ffprobe.exe"
-APP = QGuiApplication.instance() or QGuiApplication([])
+APP = QApplication.instance() or QApplication([])
 FOLDER_FILES = ("video/", "photo/",
                 "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
                 "jpg;jpeg;png;webp;heic")
