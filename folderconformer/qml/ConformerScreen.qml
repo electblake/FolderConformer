@@ -46,11 +46,6 @@ Pane {
                         screen.controller.start(index)
                     }
                 }
-                FilesPanel {
-                    Layout.fillWidth: true
-                    controller: screen.controller
-                    enabled: !screen.controller.running
-                }
             }
         }
         Label {

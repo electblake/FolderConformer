@@ -8,6 +8,8 @@ ApplicationWindow {
     signal quitRequested()
     property bool foldersVisible: true
     signal foldersToggled(bool visible)
+    property bool filesVisible: true
+    signal filesToggled(bool visible)
     width: 820
     height: 720
     minimumWidth: 640
@@ -63,6 +65,13 @@ ApplicationWindow {
                 checkable: true
                 checked: window.foldersVisible
                 onTriggered: window.foldersToggled(!window.foldersVisible)
+            }
+            MenuItem {
+                objectName: "filesMenu"
+                text: qsTr("F&iles")
+                checkable: true
+                checked: window.filesVisible
+                onTriggered: window.filesToggled(!window.filesVisible)
             }
         }
         Menu {

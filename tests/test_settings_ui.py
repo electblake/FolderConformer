@@ -260,8 +260,7 @@ class SettingsUiTests(unittest.TestCase):
         engine.load(qml)
         window = engine.rootObjects()[0]
         APP.processEvents()
-        for name, value in (("inputFolder", r"C:\media\日本語 é"),
-                            ("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
+        for name, value in (("inputFolder", r"C:\media\日本語 é"),):
             field = window.findChild(QObject, name)
             field.forceActiveFocus()
             QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
@@ -282,8 +281,6 @@ class SettingsUiTests(unittest.TestCase):
         restored_window = restored_engine.rootObjects()[0]
         self.assertEqual(restored_window.findChild(QObject, "inputFolder").property("text"), r"C:\media\日本語 é")
         self.assertEqual(Path(restored.settings.fileName()), Path(restored.configFolder) / "FolderConformer.ini")
-        for name, value in (("videoExtensions", "mxf;mp4"), ("imageExtensions", "gif;png")):
-            self.assertEqual(restored_window.findChild(QObject, name).property("text"), value)
         self.assertTrue(restored_window.findChild(QObject, "includeSubdirectories").property("checked"))
         for rule_id in rule_ids:
             self.assertFalse(self.rule_control(restored_window, rule_id + "Enabled").property("checked"))
@@ -378,6 +375,7 @@ def inspect():
     host = next(widget for widget in qt.topLevelWidgets() if isinstance(widget, app.MainWindow))
     colors.append(host.folders_dock.palette().window().color().name())
     colors.append(host.folder_fields["videoFolder"].palette().base().color().name())
+    colors.append(host.file_fields["videoExtensions"].palette().base().color().name())
     window.close()
     return 0
 with patch.object(app, "QApplication", return_value=qt), patch.object(app, "QQmlApplicationEngine", return_value=engine), patch.object(qt, "exec", side_effect=inspect), patch.object(sys, "argv", ["folderconformer"]):
@@ -395,7 +393,7 @@ print(json.dumps(colors))
                 self.assertEqual(json.loads(result.stdout), [palette.window().color().name(),
                     palette.window().color().name(), palette.base().color().name(),
                     palette.button().color().name(), palette.window().color().name(),
-                    palette.window().color().name(), palette.base().color().name()])
+                    palette.window().color().name(), palette.base().color().name(), palette.base().color().name()])
 
     def test_qml_loads(self):
         controller = Controller()
@@ -408,9 +406,8 @@ print(json.dumps(colors))
         self.assertEqual(len(engine.rootObjects()), 1)
         window = engine.rootObjects()[0]
         APP.processEvents()
-        panels = [window.findChild(QQuickItem, name) for name in ("rulesPanel", "filesPanel")]
-        for upper, lower in zip(panels, panels[1:]):
-            self.assertLessEqual(upper.y() + upper.height(), lower.y())
+        self.assertIsNotNone(window.findChild(QQuickItem, "rulesPanel"))
+        self.assertIsNone(window.findChild(QObject, "filesPanel"))
         for name in ("landscapeFolder", "videoFolder", "imageFolder"):
             self.assertIsNone(window.findChild(QObject, name))
         checkbox = window.findChild(QObject, "includeSubdirectories")

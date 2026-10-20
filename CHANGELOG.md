@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Moved the video and image extension controls into a native Files dock below Folders on the right, with View > Files to hide or reopen it.
+
 ## [0.6.0] - 2026-10-20
 
 ### Changed

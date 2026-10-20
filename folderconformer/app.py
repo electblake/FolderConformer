@@ -14,7 +14,7 @@ from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProce
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QDockWidget, QFormLayout, QLineEdit, QMainWindow, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QDockWidget, QFormLayout, QLabel, QLineEdit, QMainWindow, QScrollArea, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
@@ -349,7 +349,32 @@ class MainWindow(QMainWindow):
         self.resizeDocks([self.folders_dock], [260], Qt.Orientation.Horizontal)
         self.folders_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("foldersVisible", visible))
         quick_window.foldersToggled.connect(self.folders_dock.setVisible)
+        self.files_dock = QDockWidget(self.tr("Files"), self)
+        self.files_dock.setObjectName("filesDock")
+        files_contents = QWidget()
+        files_form = QFormLayout(files_contents)
+        files_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self.file_fields = {}
+        for name, text in (("videoExtensions", self.tr("Video file extensions (separated by semicolons)")),
+                           ("imageExtensions", self.tr("Image file extensions (separated by semicolons)"))):
+            field = QLineEdit(getattr(controller, name))
+            field.setObjectName(name)
+            field.setAccessibleName(text)
+            field.textEdited.connect(lambda value, key=name: setattr(controller, key, value))
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setBuddy(field)
+            files_form.addRow(label, field)
+            self.file_fields[name] = field
+        files_scroll = QScrollArea()
+        files_scroll.setWidgetResizable(True)
+        files_scroll.setWidget(files_contents)
+        self.files_dock.setWidget(files_scroll)
+        self.splitDockWidget(self.folders_dock, self.files_dock, Qt.Orientation.Vertical)
+        self.files_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("filesVisible", visible))
+        quick_window.filesToggled.connect(self.files_dock.setVisible)
         controller.configurationChanged.connect(self.sync_folders)
+        controller.configurationChanged.connect(self.sync_files)
         controller.runningChanged.connect(self.sync_enabled)
         controller.updates.changed.connect(self.sync_enabled)
         quick_window.quitRequested.connect(self.close)
@@ -363,6 +388,13 @@ class MainWindow(QMainWindow):
 
     def sync_enabled(self):
         self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+        self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+
+    def sync_files(self):
+        for name, field in self.file_fields.items():
+            value = getattr(self.controller, name)
+            if field.text() != value:
+                field.setText(value)
 
     def closeEvent(self, event):
         if self.controller.running or self.controller.updates.busy:
@@ -370,6 +402,7 @@ class MainWindow(QMainWindow):
             return
         QMetaObject.invokeMethod(self.quick_window, "closeDialogs")
         self.folders_dock.close()
+        self.files_dock.close()
         super().closeEvent(event)
 
 

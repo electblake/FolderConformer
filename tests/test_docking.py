@@ -85,28 +85,69 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(fields[1].text(), "Updated/")
         self.assertEqual(fields[0].validator().validate("bad/name", 0)[0], QValidator.State.Invalid)
 
+    def test_files_dock_starts_below_folders_and_reopens_independently(self):
+        dock = self.host.files_dock
+        folders = self.host.folders_dock
+        self.assertIsInstance(dock, QDockWidget)
+        self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
+        self.assertGreaterEqual(dock.y(), folders.y() + folders.height())
+        self.assertEqual(dock.x(), folders.x())
+        self.assertEqual(len(dock.findChildren(QLineEdit)), 2)
+        self.assertIsNone(self.quick.findChild(QObject, "filesPanel"))
+        dock.setFloating(True)
+        self.assertTrue(dock.isFloating())
+        dock.close()
+        self.assertFalse(self.quick.property("filesVisible"))
+        self.assertTrue(folders.isVisible())
+        menu = self.quick.findChild(QObject, "filesMenu")
+        QMetaObject.invokeMethod(menu, "triggered")
+        self.assertTrue(dock.isVisible())
+        self.assertTrue(menu.property("checked"))
+        dock.setFloating(False)
+        self.host.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
+        self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.LeftDockWidgetArea)
+
+    def test_extension_edits_persist_and_keep_keyboard_order(self):
+        self.host.activateWindow()
+        fields = list(self.host.file_fields.values())
+        for name, value in (("videoExtensions", "mxf;MP4"), ("imageExtensions", "gif;png")):
+            field = self.host.file_fields[name]
+            field.setFocus()
+            QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+            QTest.keyClicks(field, value)
+            self.assertEqual(getattr(self.controller, name), value)
+            self.assertEqual(getattr(Controller(), name), value)
+        fields[0].setFocus()
+        QTest.keyClick(fields[0], Qt.Key.Key_Tab)
+        self.assertTrue(fields[1].hasFocus())
+        self.controller.imageExtensions = "webp;jpg"
+        self.assertEqual(fields[1].text(), "webp;jpg")
+
     def test_busy_locks_and_close_apply_to_native_host(self):
+        fields = [*self.host.folder_fields.values(), *self.host.file_fields.values()]
         self.controller.updates._busy = True
         self.controller.updates.changed.emit()
-        self.assertTrue(all(not field.isEnabled() for field in self.host.folder_fields.values()))
+        self.assertTrue(all(not field.isEnabled() for field in fields))
         self.assertFalse(self.host.close())
         self.assertTrue(self.host.isVisible())
         self.controller.updates._busy = False
         self.controller.updates.changed.emit()
-        self.assertTrue(all(field.isEnabled() for field in self.host.folder_fields.values()))
+        self.assertTrue(all(field.isEnabled() for field in fields))
         with patch.object(Controller, "running", new_callable=PropertyMock, return_value=True):
             self.controller.runningChanged.emit()
             self.assertFalse(self.host.close())
-            self.assertTrue(all(not field.isEnabled() for field in self.host.folder_fields.values()))
+            self.assertTrue(all(not field.isEnabled() for field in fields))
         self.controller.runningChanged.emit()
         QMetaObject.invokeMethod(self.quick.findChild(QObject, "settingsMenu"), "triggered")
         APP.processEvents()
         dialog = self.quick.findChild(QObject, "settingsDialog")
         self.assertTrue(dialog.isVisible())
         self.host.folders_dock.setFloating(True)
+        self.host.files_dock.setFloating(True)
         self.assertTrue(self.host.close())
         self.assertFalse(dialog.isVisible())
         self.assertFalse(self.host.folders_dock.isVisible())
+        self.assertFalse(self.host.files_dock.isVisible())
 
     def test_file_quit_closes_native_host(self):
         QMetaObject.invokeMethod(self.quick.findChild(QObject, "quitMenu"), "triggered")
@@ -131,7 +172,7 @@ class DockingTests(unittest.TestCase):
         self.host.setFont(font)
         self.host.resize(900, 600)
         APP.processEvents()
-        for field in self.host.folder_fields.values():
+        for field in [*self.host.folder_fields.values(), *self.host.file_fields.values()]:
             self.assertGreaterEqual(field.height(), field.sizeHint().height())
             self.assertGreaterEqual(field.width(), field.minimumSizeHint().width())
         scroll = self.host.folders_dock.widget()
