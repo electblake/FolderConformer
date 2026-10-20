@@ -1,3 +1,6 @@
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -178,3 +181,67 @@ class DockingTests(unittest.TestCase):
         scroll = self.host.folders_dock.widget()
         self.assertTrue(scroll.widgetResizable())
         self.assertGreaterEqual(self.quick.width(), 640)
+
+    def test_layout_restores_in_fresh_process_after_close_and_restart(self):
+        script = r"""
+import json, sys
+from pathlib import Path
+from PySide6.QtCore import QObject, QTimer, Qt, QUrl
+from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
+from folderconformer import app
+qt = QApplication([])
+app.user_config_path = lambda *a, **k: Path(sys.argv[1])
+controller = app.Controller()
+engine = QQmlApplicationEngine()
+engine.setInitialProperties({"controller": controller, "visible": False})
+engine.load(QUrl.fromLocalFile(str(Path(app.__file__).parent / "qml/Main.qml")))
+quick = engine.rootObjects()[0]
+host = app.MainWindow(controller, quick)
+host.show()
+result = {}
+def inspect():
+    if sys.argv[2] == "save":
+        host.resize(1200, 800)
+        host.move(100, 100)
+        if sys.argv[3] == "docked":
+            host.addDockWidget(Qt.LeftDockWidgetArea, host.folders_dock)
+            host.splitDockWidget(host.folders_dock, host.files_dock, Qt.Vertical)
+            host.resizeDocks([host.folders_dock], [340], Qt.Horizontal)
+            host.resizeDocks([host.folders_dock, host.files_dock], [450, 300], Qt.Vertical)
+        else:
+            for index, dock in enumerate((host.folders_dock, host.files_dock)):
+                dock.setFloating(True)
+                dock.setGeometry(160 + index * 400, 180, 350, 420)
+            if sys.argv[3] == "folders_closed":
+                host.folders_dock.close()
+            if sys.argv[3] == "files_closed":
+                host.files_dock.close()
+    QTest.qWait(100)
+    result["window"] = host.geometry().getRect()
+    result["docks"] = [
+        [dock.objectName(), host.dockWidgetArea(dock).value, dock.isFloating(),
+         dock.isVisible(), dock.geometry().getRect(),
+         quick.findChild(QObject, menu).property("checked")]
+        for dock, menu in ((host.folders_dock, "foldersMenu"), (host.files_dock, "filesMenu"))
+    ]
+    if sys.argv[4] == "restart":
+        controller.restart()
+    else:
+        host.close()
+QTimer.singleShot(100, inspect)
+qt.exec()
+print(json.dumps(result))
+"""
+        for scenario in ("docked", "floating", "folders_closed", "files_closed"):
+            for shutdown in ("close", "restart"):
+                with self.subTest(scenario=scenario, shutdown=shutdown):
+                    with tempfile.TemporaryDirectory() as directory:
+                        saved = subprocess.run(
+                            [sys.executable, "-c", script, directory, "save", scenario, shutdown],
+                            check=True, capture_output=True, text=True, timeout=15)
+                        restored = subprocess.run(
+                            [sys.executable, "-c", script, directory, "restore", scenario, "close"],
+                            check=True, capture_output=True, text=True, timeout=15)
+                        self.assertEqual(json.loads(restored.stdout), json.loads(saved.stdout))

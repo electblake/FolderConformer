@@ -28,6 +28,7 @@ class Controller(QObject):
     progress = Signal(int, int, int)
     completionSummary = Signal(str)
     explorerCompleted = Signal(int)
+    restartRequested = Signal()
 
     def __init__(self, folder=None):
         super().__init__()
@@ -90,6 +91,7 @@ class Controller(QObject):
         self.save()
         self.location_settings.sync()
         self.restart_requested = True
+        self.restartRequested.emit()
         QGuiApplication.quit()
 
     @Property("QStringList", constant=True)
@@ -378,7 +380,12 @@ class MainWindow(QMainWindow):
         controller.runningChanged.connect(self.sync_enabled)
         controller.updates.changed.connect(self.sync_enabled)
         quick_window.quitRequested.connect(self.close)
+        controller.restartRequested.connect(self.close)
         self.sync_enabled()
+        if controller.settings.contains("window/geometry"):
+            self.restoreGeometry(controller.settings.value("window/geometry"))
+        if controller.settings.contains("window/state"):
+            self.restoreState(controller.settings.value("window/state"))
 
     def sync_folders(self):
         for name, field in self.folder_fields.items():
@@ -400,6 +407,9 @@ class MainWindow(QMainWindow):
         if self.controller.running or self.controller.updates.busy:
             event.ignore()
             return
+        self.controller.settings.setValue("window/geometry", self.saveGeometry())
+        self.controller.settings.setValue("window/state", self.saveState())
+        self.controller.settings.sync()
         QMetaObject.invokeMethod(self.quick_window, "closeDialogs")
         self.folders_dock.close()
         self.files_dock.close()

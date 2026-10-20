@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Saved and restored the main window geometry and both docks' layout, sizes, floating positions, and visibility through Qt's built-in state APIs and QSettings.
+
 ## [0.6.1] - 2026-10-20
 
 ### Changed
