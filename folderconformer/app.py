@@ -401,6 +401,8 @@ class MainWindow(QMainWindow):
         quick_window.quitRequested.connect(self.close)
         controller.restartRequested.connect(self.close)
         self.sync_enabled()
+        self.default_layout = self.saveState()
+        quick_window.resetLayoutRequested.connect(lambda: self.restoreState(self.default_layout))
         if controller.settings.contains("window/geometry"):
             self.restoreGeometry(controller.settings.value("window/geometry"))
         if controller.settings.contains("window/state"):

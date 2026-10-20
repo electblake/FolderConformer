@@ -10,6 +10,7 @@ ApplicationWindow {
     signal foldersToggled(bool visible)
     property bool filesVisible: true
     signal filesToggled(bool visible)
+    signal resetLayoutRequested()
     width: 820
     height: 720
     minimumWidth: 640
@@ -72,6 +73,12 @@ ApplicationWindow {
                 checkable: true
                 checked: window.filesVisible
                 onTriggered: window.filesToggled(!window.filesVisible)
+            }
+            MenuSeparator {}
+            MenuItem {
+                objectName: "resetLayoutMenu"
+                text: qsTr("&Reset Layout")
+                onTriggered: window.resetLayoutRequested()
             }
         }
         Menu {

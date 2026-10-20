@@ -152,6 +152,31 @@ class DockingTests(unittest.TestCase):
         self.assertFalse(self.host.folders_dock.isVisible())
         self.assertFalse(self.host.files_dock.isVisible())
 
+    def test_reset_layout_redocks_and_reopens_both_docks(self):
+        self.controller.enumerateConflicts = True
+        geometry = self.host.geometry()
+        self.host.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.host.folders_dock)
+        self.host.files_dock.setFloating(True)
+        self.host.files_dock.resize(450, 400)
+        self.host.folders_dock.close()
+        self.host.files_dock.close()
+        menu = self.quick.findChild(QObject, "resetLayoutMenu")
+        QMetaObject.invokeMethod(menu, "triggered")
+        APP.processEvents()
+        for dock, name in ((self.host.folders_dock, "foldersMenu"), (self.host.files_dock, "filesMenu")):
+            self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
+            self.assertFalse(dock.isFloating())
+            self.assertTrue(dock.isVisible())
+            self.assertTrue(self.quick.findChild(QObject, name).property("checked"))
+        self.assertGreaterEqual(self.host.files_dock.y(),
+                                self.host.folders_dock.y() + self.host.folders_dock.height())
+        self.assertEqual(self.host.geometry(), geometry)
+        self.assertTrue(self.controller.enumerateConflicts)
+        self.host.tabifyDockWidget(self.host.folders_dock, self.host.files_dock)
+        QMetaObject.invokeMethod(menu, "triggered")
+        APP.processEvents()
+        self.assertEqual(self.host.tabifiedDockWidgets(self.host.folders_dock), [])
+
     def test_file_quit_closes_native_host(self):
         QMetaObject.invokeMethod(self.quick.findChild(QObject, "quitMenu"), "triggered")
         APP.processEvents()
