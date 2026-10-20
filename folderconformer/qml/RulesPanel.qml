@@ -6,6 +6,7 @@ GroupBox {
     id: panel
     objectName: "rulesPanel"
     required property QtObject controller
+    signal runOnceRequested(int index)
     title: qsTr("Rules — applied from top to bottom")
 
     ColumnLayout {
@@ -36,6 +37,13 @@ GroupBox {
                     })[ruleRow.modelData.id]
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
+                }
+                Button {
+                    objectName: ruleRow.modelData.id + "RunOnce"
+                    text: qsTr("Run Once")
+                    enabled: !panel.controller.running && panel.controller.folder.length > 0
+                        && (ruleRow.modelData.id !== "landscape" || panel.controller.landscapeFolder.length > 0)
+                    onClicked: panel.runOnceRequested(ruleRow.index)
                 }
                 Button {
                     objectName: ruleRow.modelData.id + "MoveUp"

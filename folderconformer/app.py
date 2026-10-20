@@ -227,6 +227,10 @@ class Controller(QObject):
         self.configFolder = url.toLocalFile()
 
     @Slot()
+    def openOutputFolder(self):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self._folder).resolve())))
+
+    @Slot()
     def openConfigFolder(self):
         path = Path(self._config_folder)
         path.mkdir(parents=True, exist_ok=True)
@@ -243,11 +247,13 @@ class Controller(QObject):
         self.save()
 
     @Slot()
-    def start(self):
+    @Slot(int)
+    def start(self, index=-1):
         self._run_state = ""
         self._waiting = False
         self.runStateChanged.emit()
-        arguments = ["--worker", self._folder, json.dumps(self._rules), self._landscape_folder,
+        rules = self._rules if index == -1 else [{"id": self._rules[index]["id"], "enabled": True}]
+        arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      "--controlled"]
         if self._include_subdirectories:

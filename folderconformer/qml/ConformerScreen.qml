@@ -37,6 +37,14 @@ Pane {
                     Layout.fillWidth: true
                     controller: screen.controller
                     enabled: !screen.controller.running
+                    onRunOnceRequested: function(index) {
+                        log.clear()
+                        screen.completionSummary = ""
+                        screen.processed = 0
+                        screen.total = 0
+                        screen.status = qsTr("Processing…")
+                        screen.controller.start(index)
+                    }
                 }
                 RuleFoldersPanel {
                     Layout.fillWidth: true
@@ -123,6 +131,12 @@ Pane {
         }
         RowLayout {
             Layout.fillWidth: true
+            Button {
+                objectName: "openOutputFolder"
+                text: qsTr("Open Output Folder")
+                enabled: screen.controller.folder.length > 0
+                onClicked: screen.controller.openOutputFolder()
+            }
             Item { Layout.fillWidth: true }
             Button {
                 objectName: "copyOutput"

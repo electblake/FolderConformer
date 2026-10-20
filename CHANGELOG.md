@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-19
+
+### Added
+
+- Added Run Once before each rule's move buttons to run that rule alone without changing saved rule settings.
+- Added Open Output Folder at the bottom left beside the output controls.
+
 ## [0.5.1] - 2026-10-19
 
 ### Added

@@ -63,6 +63,51 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(Controller().rules, controller.rules)
         window.close()
 
+    def test_run_once_runs_only_selected_disabled_rule_after_reordering(self):
+        folder = Path(self.temporary.name) / "media"
+        (folder / "images").mkdir(parents=True)
+        (folder / "nested").mkdir()
+        (folder / "nested/note.txt").write_text("content")
+        controller = Controller()
+        controller.includeSubdirectories = True
+        controller.setEnabled(1, False)
+        controller.moveRule(1, -1)
+        saved_rules = json.loads(json.dumps(controller.rules))
+        engine = QQmlApplicationEngine()
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        APP.processEvents()
+        for rule in controller.rules:
+            button = self.rule_control(window, rule["id"] + "RunOnce")
+            move = self.rule_control(window, rule["id"] + "MoveUp")
+            self.assertEqual(button.property("text"), "Run Once")
+            self.assertFalse(button.property("enabled"))
+            self.assertLess(button.x(), move.x())
+        controller.folder = str(folder)
+        button = self.rule_control(window, "extensionRunOnce")
+        self.assertTrue(button.property("enabled"))
+        screen = window.findChild(QObject, "conformerScreen")
+        screen.setProperty("total", 42)
+        screen.setProperty("completionSummary", "previous run")
+        loop = QEventLoop()
+        results = []
+        controller.completed.connect(lambda code: (results.append(code), loop.quit()))
+        QMetaObject.invokeMethod(button, "clicked")
+        self.assertEqual(screen.property("total"), 0)
+        self.assertEqual(screen.property("completionSummary"), "")
+        self.assertEqual(screen.property("status"), "Processing…")
+        self.assertFalse(button.property("enabled"))
+        QTimer.singleShot(10000, loop.quit)
+        loop.exec()
+        self.assertEqual(results, [0])
+        self.assertEqual((folder / "txt/note.txt").read_text(), "content")
+        self.assertTrue((folder / "images").is_dir())
+        self.assertEqual(controller.rules, saved_rules)
+        self.assertEqual(Controller().rules, saved_rules)
+        self.assertTrue(button.property("enabled"))
+        window.close()
+
     def test_platformdirs_config_location(self):
         controller = Controller()
         self.config_path.assert_called_once_with("FolderConformer", appauthor=False)
