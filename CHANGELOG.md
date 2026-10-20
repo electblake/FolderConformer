@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-19
+
+### Added
+
+- Added a checked-by-default Launch FolderConformer checkbox on the installer's completion page, skipped during silent installations.
+
 ## [0.5.2] - 2026-10-19
 
 ### Added

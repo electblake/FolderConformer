@@ -44,6 +44,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
 
+[Run]
+Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
+
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\source"
 Type: filesandordirs; Name: "{localappdata}\FolderConformer\runtime"
