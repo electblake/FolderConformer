@@ -10,8 +10,8 @@ ApplicationWindow {
     title: qsTr("Software Update")
     flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowCloseButtonHint
     modality: Qt.WindowModal
-    minimumWidth: 460
-    width: 520
+    minimumWidth: Math.max(460, content.implicitWidth + 32)
+    width: Math.max(520, minimumWidth)
     height: content.implicitHeight + 32
     minimumHeight: content.implicitHeight + 32
     onClosing: function(close) { close.accepted = !dialog.updater.busy }
@@ -50,6 +50,18 @@ ApplicationWindow {
                         enabled: !dialog.updater.busy
                         onClicked: Qt.openUrlExternally(dialog.updater.releasesUrl)
                     }
+                    Button {
+                        objectName: "downloadUpdate"
+                        text: qsTr("Download Update")
+                        enabled: !dialog.updater.busy && dialog.updater.available && !dialog.updater.ready
+                        onClicked: dialog.updater.download()
+                    }
+                    Button {
+                        objectName: "installUpdate"
+                        text: qsTr("Quit and Install")
+                        enabled: !dialog.updater.busy && dialog.updater.ready
+                        onClicked: dialog.installRequested()
+                    }
                 }
             }
         }
@@ -70,18 +82,6 @@ ApplicationWindow {
         }
         RowLayout {
             Layout.alignment: Qt.AlignRight
-            Button {
-                objectName: "downloadUpdate"
-                text: qsTr("Download Update")
-                enabled: !dialog.updater.busy && dialog.updater.available && !dialog.updater.ready
-                onClicked: dialog.updater.download()
-            }
-            Button {
-                objectName: "installUpdate"
-                text: qsTr("Quit and Install")
-                enabled: !dialog.updater.busy && dialog.updater.ready
-                onClicked: dialog.installRequested()
-            }
             Button {
                 objectName: "closeUpdate"
                 text: qsTr("Close")

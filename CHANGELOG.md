@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-19
+
+### Changed
+
+- Moved Download Update and Quit and Install beside the other update buttons and sized the Software Update dialog to fit the row.
+
 ## [0.5.3] - 2026-10-19
 
 ### Added
