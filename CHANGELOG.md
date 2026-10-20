@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
 ### Changed
 
 - Moved all three destination folder controls out of the Folders field group into a native, movable Qt dock widget, initially docked on the right.
