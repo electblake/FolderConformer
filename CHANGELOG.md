@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-20
+
 ### Changed
 
 - Added View > Reset Layout below a separator to restore both docks to their default positions using Qt's built-in state restoration.
