@@ -39,14 +39,15 @@ def is_landscape(path: Path, ffprobe: Path) -> bool:
 
 def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path,
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
-            recursive: bool = False, control=None):
+            recursive: bool = False, control=None, enumerate_conflicts: bool = False):
     video_suffixes = {extension.strip().lstrip(".").lower() for extension in video_extensions.split(";") if extension.strip()}
     image_suffixes = {extension.strip().lstrip(".").lower() for extension in image_extensions.split(";") if extension.strip()}
     files_processed = files_moved = folders_renamed = folders_moved = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for file_rules, group in groupby(enabled_rules, key=lambda rule: rule["id"] in ("landscape", "extension")):
         if file_rules:
-            processed, moved = conform_files(folder, list(group), landscape_folder, ffprobe, recursive, control)
+            processed, moved = conform_files(folder, list(group), landscape_folder, ffprobe, recursive, control,
+                                            enumerate_conflicts)
             files_processed += processed
             files_moved += moved
             if control is not None and control.stopped:
@@ -104,7 +105,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
 
 
 def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, recursive: bool = False,
-                  control=None):
+                  control=None, enumerate_conflicts: bool = False):
     files = []
     print(f"Scanning {folder}", flush=True)
     directories = [folder]
@@ -141,10 +142,17 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
                 destination /= source.suffix.lstrip(".").lower() or "no-extension"
         target = destination / source.name if destination != folder else source
         if target != source:
-            destination.mkdir(parents=True, exist_ok=True)
-            source.rename(target)
-            moved += 1
-            print(f"{source.name} → {target.relative_to(folder)}", flush=True)
+            if os.path.lexists(target) and not enumerate_conflicts:
+                print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+            else:
+                number = 1
+                while os.path.lexists(target):
+                    target = destination / f"{source.stem}_{number}{source.suffix}"
+                    number += 1
+                destination.mkdir(parents=True, exist_ok=True)
+                source.rename(target)
+                moved += 1
+                print(f"{source.name} → {target.relative_to(folder)}", flush=True)
         print(f"[{index}/{len(files)}] {source.name}", flush=True)
         processed += 1
     return processed, moved

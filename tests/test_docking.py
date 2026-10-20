@@ -127,7 +127,7 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(fields[1].text(), "webp;jpg")
 
     def test_busy_locks_and_close_apply_to_native_host(self):
-        fields = [*self.host.folder_fields.values(), *self.host.file_fields.values()]
+        fields = [*self.host.folder_fields.values(), *self.host.file_fields.values(), self.host.enumerate_conflicts]
         self.controller.updates._busy = True
         self.controller.updates.changed.emit()
         self.assertTrue(all(not field.isEnabled() for field in fields))
@@ -156,6 +156,22 @@ class DockingTests(unittest.TestCase):
         QMetaObject.invokeMethod(self.quick.findChild(QObject, "quitMenu"), "triggered")
         APP.processEvents()
         self.assertFalse(self.host.isVisible())
+
+    def test_conflict_checkbox_persists_and_controls_worker(self):
+        checkbox = self.host.enumerate_conflicts
+        self.assertFalse(checkbox.isChecked())
+        checkbox.click()
+        self.assertTrue(self.controller.enumerateConflicts)
+        self.assertTrue(Controller().enumerateConflicts)
+        with patch.object(self.controller, "_launch") as launch:
+            self.controller.start()
+            self.assertIn("--enumerate-conflicts", launch.call_args.args[1])
+            checkbox.click()
+            self.controller.start(0)
+            self.assertNotIn("--enumerate-conflicts", launch.call_args.args[1])
+        self.assertFalse(Controller().enumerateConflicts)
+        self.controller.enumerateConflicts = True
+        self.assertTrue(checkbox.isChecked())
 
     def test_install_update_closes_host_and_floating_dock(self):
         with patch.object(self.controller.updates, "check"):

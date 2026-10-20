@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Added a saved Files dock checkbox to enumerate conflicting file names with `_1`, `_2`, and later suffixes; unchecked conflicts are logged and skipped without stopping processing.
 - Saved and restored the main window geometry and both docks' layout, sizes, floating positions, and visibility through Qt's built-in state APIs and QSettings.
 
 ## [0.6.1] - 2026-10-20

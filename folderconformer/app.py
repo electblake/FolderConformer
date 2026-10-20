@@ -14,7 +14,7 @@ from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProce
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QDockWidget, QFormLayout, QLabel, QLineEdit, QMainWindow, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout, QLabel, QLineEdit, QMainWindow, QScrollArea, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
@@ -45,6 +45,7 @@ class Controller(QObject):
         self._theme = self.settings.value("appearance/theme", "blender", type=str)
         self._folder = self.settings.value("folder", "", type=str)
         self._include_subdirectories = self.settings.value("includeSubdirectories", False, type=bool)
+        self._enumerate_conflicts = self.settings.value("enumerateConflicts", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
@@ -77,6 +78,7 @@ class Controller(QObject):
         self.settings.setValue("appearance/theme", self._theme)
         self.settings.setValue("folder", self._folder)
         self.settings.setValue("includeSubdirectories", self._include_subdirectories)
+        self.settings.setValue("enumerateConflicts", self._enumerate_conflicts)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
@@ -132,6 +134,15 @@ class Controller(QObject):
     @includeSubdirectories.setter
     def includeSubdirectories(self, value):
         self._include_subdirectories = value
+        self.save()
+
+    @Property(bool, notify=configurationChanged)
+    def enumerateConflicts(self):
+        return self._enumerate_conflicts
+
+    @enumerateConflicts.setter
+    def enumerateConflicts(self, value):
+        self._enumerate_conflicts = value
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -261,6 +272,8 @@ class Controller(QObject):
                      "--controlled"]
         if self._include_subdirectories:
             arguments.append("--recursive")
+        if self._enumerate_conflicts:
+            arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
 
     @Slot()
@@ -368,6 +381,12 @@ class MainWindow(QMainWindow):
             label.setBuddy(field)
             files_form.addRow(label, field)
             self.file_fields[name] = field
+        self.enumerate_conflicts = QCheckBox(self.tr("Resolve name conflicts (_1, _2, …)"))
+        self.enumerate_conflicts.setObjectName("enumerateConflicts")
+        self.enumerate_conflicts.setToolTip(self.tr("When unchecked, skip files whose destination name already exists."))
+        self.enumerate_conflicts.setChecked(controller.enumerateConflicts)
+        self.enumerate_conflicts.clicked.connect(lambda checked: setattr(controller, "enumerateConflicts", checked))
+        files_form.addRow(self.enumerate_conflicts)
         files_scroll = QScrollArea()
         files_scroll.setWidgetResizable(True)
         files_scroll.setWidget(files_contents)
@@ -398,6 +417,7 @@ class MainWindow(QMainWindow):
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
 
     def sync_files(self):
+        self.enumerate_conflicts.setChecked(self.controller.enumerateConflicts)
         for name, field in self.file_fields.items():
             value = getattr(self.controller, name)
             if field.text() != value:
@@ -434,7 +454,7 @@ def main():
         control = RunControl() if "--controlled" in sys.argv[9:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:],
-                control=control)
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[9:])
         return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     if controller.theme:

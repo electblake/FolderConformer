@@ -37,9 +37,10 @@ class PipelineTests(unittest.TestCase):
                        check=True, capture_output=True)
         return path
 
-    def run_rules(self, rules, recursive=False):
+    def run_rules(self, rules, recursive=False, enumerate_conflicts=False):
         with contextlib.redirect_stdout(io.StringIO()):
-            conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES, recursive=recursive)
+            conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES, recursive=recursive,
+                    enumerate_conflicts=enumerate_conflicts)
 
     def test_summary_counts_folder_changes_when_no_files_are_scanned(self):
         for name in ("Images", "Videos", "jpg", "mp4"):
@@ -198,12 +199,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(source.read_text(), "untouched")
         self.assertFalse((self.folder / "note.txt").exists())
 
-    def test_recursive_duplicate_names_fail_without_overwrite(self):
+    def test_recursive_duplicate_names_skip_without_overwrite(self):
         for name in ("a", "b"):
             (self.folder / name).mkdir()
             (self.folder / name / "note.txt").write_text(name)
-        with self.assertRaises(FileExistsError):
-            self.run_rules([{"id": "extension", "enabled": True}], recursive=True)
+        self.run_rules([{"id": "extension", "enabled": True}], recursive=True)
         self.assertEqual((self.folder / "txt/note.txt").read_text(), "a")
         self.assertEqual((self.folder / "b/note.txt").read_text(), "b")
 
@@ -238,14 +238,46 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue((self.folder / "no-extension/readme").is_file())
         self.assertEqual((self.folder / "png/existing.txt").read_text(), "untouched")
 
-    def test_collision_stops_without_overwrite(self):
+    def test_collision_skips_without_overwrite_and_continues(self):
         (self.folder / "txt").mkdir()
         (self.folder / "txt/note.txt").write_text("original")
         (self.folder / "note.txt").write_text("incoming")
-        with self.assertRaises(FileExistsError):
-            self.run_rules([{"id": "extension", "enabled": True}])
+        (self.folder / "other.txt").write_text("other")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            conform(self.folder, [{"id": "extension", "enabled": True}], "Wide", FFPROBE, *FOLDER_FILES)
         self.assertEqual((self.folder / "txt/note.txt").read_text(), "original")
         self.assertEqual((self.folder / "note.txt").read_text(), "incoming")
+        self.assertEqual((self.folder / "txt/other.txt").read_text(), "other")
+        self.assertIn("Skipped name conflict: note.txt", output.getvalue())
+        self.assertIn("Completed: 2 files processed, 1 files moved", output.getvalue())
+
+    def test_conflicts_enumerate_preserving_suffix_and_existing_destinations(self):
+        for name, destination in (("note.TXT", "txt"), ("日本語", "no-extension"), ("archive.tar.gz", "gz")):
+            with self.subTest(name=name):
+                target = self.folder / destination
+                target.mkdir()
+                (target / name).write_text("original")
+                source = self.folder / name
+                source.write_text("incoming")
+                (target / f"{source.stem}_1{source.suffix}").write_text("occupied")
+                (target / f"{source.stem}_2{source.suffix}").mkdir()
+                self.run_rules([{"id": "extension", "enabled": True}], enumerate_conflicts=True)
+                self.assertEqual((target / name).read_text(), "original")
+                self.assertEqual((target / f"{source.stem}_1{source.suffix}").read_text(), "occupied")
+                self.assertTrue((target / f"{source.stem}_2{source.suffix}").is_dir())
+                self.assertEqual((target / f"{source.stem}_3{source.suffix}").read_text(), "incoming")
+                self.assertFalse(source.exists())
+
+    def test_recursive_conflicts_enumerate_and_repeat_run_keeps_names(self):
+        for name in ("a", "b", "c"):
+            (self.folder / name).mkdir()
+            (self.folder / name / "note.txt").write_text(name)
+        rules = [{"id": "extension", "enabled": True}]
+        self.run_rules(rules, recursive=True, enumerate_conflicts=True)
+        self.run_rules(rules, recursive=True, enumerate_conflicts=True)
+        self.assertEqual({path.name: path.read_text() for path in (self.folder / "txt").iterdir()},
+                         {"note.txt": "a", "note_1.txt": "b", "note_2.txt": "c"})
 
     def test_corrupt_media_fails(self):
         (self.folder / "bad.png").write_bytes(b"invalid")
@@ -271,6 +303,24 @@ class PipelineTests(unittest.TestCase):
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
         self.assertEqual((folder / "txt/é.txt").read_text(), "preserved")
+
+    def test_worker_conflict_option_skips_or_enumerates(self):
+        for enumerate_conflicts in (False, True):
+            with self.subTest(enumerate_conflicts=enumerate_conflicts):
+                folder = self.folder / str(enumerate_conflicts)
+                (folder / "txt").mkdir(parents=True)
+                (folder / "txt/note.txt").write_text("original")
+                (folder / "note.txt").write_text("incoming")
+                arguments = [sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
+                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES]
+                if enumerate_conflicts:
+                    arguments.append("--enumerate-conflicts")
+                result = subprocess.run(arguments, check=True, capture_output=True, encoding="utf-8")
+                self.assertIn("Completed", result.stdout)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual((folder / "txt/note.txt").read_text(), "original")
+                incoming = folder / "txt/note_1.txt" if enumerate_conflicts else folder / "note.txt"
+                self.assertEqual(incoming.read_text(), "incoming")
 
     def test_stop_after_file_rules_preserves_later_files(self):
         (self.folder / "a.txt").write_text("a")
