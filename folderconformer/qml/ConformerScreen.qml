@@ -56,8 +56,9 @@ Pane {
             wrapMode: Text.WordWrap
         }
         RowLayout {
+            Layout.fillWidth: true
             Button {
-                text: qsTr("Start moving files")
+                text: qsTr("Execute rules")
                 enabled: !screen.controller.running && screen.controller.folder.length > 0
                     && (!screen.controller.rules.some(rule => rule.id === "landscape" && rule.enabled)
                         || screen.controller.landscapeFolder.length > 0)
@@ -91,6 +92,21 @@ Pane {
                 enabled: screen.controller.running && screen.controller.runState !== "cancelling"
                 onClicked: screen.controller.cancel()
             }
+            Item { Layout.fillWidth: true }
+            Button {
+                objectName: "openOutputFolder"
+                text: qsTr("Open Output Folder")
+                enabled: screen.controller.folder.length > 0
+                onClicked: screen.controller.openOutputFolder()
+            }
+            Button {
+                objectName: "copyOutput"
+                text: qsTr("Copy Output")
+                onClicked: {
+                    log.selectAll()
+                    log.copy()
+                }
+            }
         }
         ProgressBar {
             Layout.fillWidth: true
@@ -117,24 +133,6 @@ Pane {
                 readOnly: true
                 wrapMode: TextEdit.Wrap
                 Accessible.name: qsTr("Processing log")
-            }
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            Button {
-                objectName: "openOutputFolder"
-                text: qsTr("Open Output Folder")
-                enabled: screen.controller.folder.length > 0
-                onClicked: screen.controller.openOutputFolder()
-            }
-            Item { Layout.fillWidth: true }
-            Button {
-                objectName: "copyOutput"
-                text: qsTr("Copy Output")
-                onClicked: {
-                    log.selectAll()
-                    log.copy()
-                }
             }
         }
     }

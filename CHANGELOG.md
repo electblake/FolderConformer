@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-20
+
+### Changed
+
+- Renamed the main processing button to Execute rules.
+- Moved Open Output Folder and Copy Output to the right end of the processing controls row.
+
 ## [0.6.3] - 2026-10-20
 
 ### Changed
