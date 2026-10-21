@@ -42,6 +42,12 @@ class PipelineTests(unittest.TestCase):
             conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES,
                     enumerate_conflicts=enumerate_conflicts)
 
+    def test_landscape_checks_report_missing_default_folders_as_bad(self):
+        for rule_id in ("landscape", "landscape_images"):
+            with self.subTest(rule=rule_id):
+                self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE), "BAD")
+        self.assertEqual(list(self.folder.iterdir()), [])
+
     def test_summary_counts_folder_changes_when_no_files_are_scanned(self):
         for name in ("Images", "Videos", "jpg", "mp4"):
             (self.folder / name).mkdir()

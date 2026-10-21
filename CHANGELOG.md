@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added `ERR` status for failed checks, including workers that cannot start, while preserving failure details in the log.
+
+### Fixed
+
+- Fixed H2 and B7 checks to return `BAD` when their configured media folder is missing; missing or inaccessible input folders still report an error.
+
 ## [0.7.0] - 2026-10-21
 
 ### Added

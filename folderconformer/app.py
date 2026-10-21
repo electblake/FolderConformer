@@ -74,7 +74,7 @@ class Controller(QObject):
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.stateChanged.connect(self.runningChanged)
         self.process.finished.connect(self.finished)
-        self.process.errorOccurred.connect(lambda _: self.output.emit(self.process.errorString()))
+        self.process.errorOccurred.connect(self.process_error)
 
     @Property(QObject, constant=True)
     def updates(self):
@@ -213,6 +213,7 @@ class Controller(QObject):
 
     @Slot(str)
     def checkRule(self, rule_id):
+        self._check_rule_id = rule_id
         self._check_statuses[rule_id] = "-"
         self.checkStatusesChanged.emit()
         self._run_state = ""
@@ -346,12 +347,21 @@ class Controller(QObject):
                 seconds = math.ceil((total - current) * self.timer.nsecsElapsed() / 1e9 / current)
                 self.progress.emit(current, total, seconds)
 
+    def process_error(self, error):
+        self.output.emit(self.process.errorString())
+        if self._kind == "check" and error == QProcess.ProcessError.FailedToStart:
+            self._check_statuses[self._check_rule_id] = "ERR"
+            self.checkStatusesChanged.emit()
+
     def finished(self, code, _status):
         self.read_output()
         self.output.emit(self.pending + self.decoder.decode(b"", final=True))
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
         elif self._kind == "check":
+            if code != 0 or _status == QProcess.ExitStatus.CrashExit:
+                self._check_statuses[self._check_rule_id] = "ERR"
+                self.checkStatusesChanged.emit()
             self._run_state = ""
             self.runStateChanged.emit()
         else:

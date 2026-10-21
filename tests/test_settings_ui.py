@@ -272,14 +272,59 @@ class SettingsUiTests(unittest.TestCase):
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
         self.assertEqual(controller.checkStatuses["landscape_images"], "OK")
-        (folder / "photo").rmdir()
+        (folder / "photo" / "broken.png").write_text("invalid image")
         output = []
         controller.output.connect(output.append)
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
         self.assertNotEqual(controller.process.exitCode(), 0)
-        self.assertIn("FileNotFoundError", "".join(output))
-        self.assertEqual(controller.checkStatuses["landscape_images"], "-")
+        self.assertIn("Traceback (most recent call last):", "".join(output))
+        self.assertEqual(controller.checkStatuses["landscape_images"], "ERR")
+        (folder / "photo" / "broken.png").unlink()
+        controller.checkRule("landscape_images")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["landscape_images"], "OK")
+
+    def test_check_worker_start_failure_reports_err(self):
+        controller = Controller(self.temporary.name)
+        output = []
+        controller.output.connect(output.append)
+        with patch("folderconformer.app.sys.executable", str(Path(self.temporary.name) / "python.exe")):
+            controller.checkRule("extension")
+            self.assertFalse(controller.process.waitForStarted(10000))
+        self.assertEqual(controller.checkStatuses["extension"], "ERR")
+        self.assertIn(controller.process.errorString(), "".join(output))
+        self.assertFalse(controller.running)
+
+    def test_missing_input_folder_reports_err_for_landscape_checks(self):
+        controller = Controller(str(Path(self.temporary.name) / "missing"))
+        for rule_id in ("landscape", "landscape_images"):
+            with self.subTest(rule=rule_id):
+                controller.checkRule(rule_id)
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertNotEqual(controller.process.exitCode(), 0)
+                self.assertEqual(controller.checkStatuses[rule_id], "ERR")
+
+    def test_landscape_checks_report_missing_media_folders_as_bad(self):
+        folder = Path(self.temporary.name) / "media"
+        folder.mkdir()
+        controller = Controller(str(folder))
+        controller.imageFolder = "pictures"
+        controller.videoFolder = "clips"
+        for rule_id, directory in (("landscape_images", "pictures"), ("landscape", "clips")):
+            with self.subTest(rule=rule_id):
+                output = []
+                controller.output.connect(output.append)
+                controller.checkRule(rule_id)
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertEqual(controller.process.exitCode(), 0)
+                self.assertEqual(controller.checkStatuses[rule_id], "BAD")
+                self.assertNotIn("Traceback", "".join(output))
+                self.assertFalse((folder / directory).exists())
+                (folder / directory).mkdir()
+                controller.checkRule(rule_id)
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertEqual(controller.checkStatuses[rule_id], "OK")
 
     def test_new_rule_is_added_to_saved_rules_once(self):
         controller = Controller()

@@ -114,8 +114,10 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         directory = video_folder if rule_id == "landscape" else image_folder
         extensions = video_extensions if rule_id == "landscape" else image_extensions
         suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
-        bad = any(path.is_file() and path.suffix.lstrip(".").lower() in suffixes
-                  and is_landscape(path, ffprobe) for path in (Path(folder) / directory).iterdir())
+        target = Path(folder) / directory
+        with os.scandir(folder):
+            bad = not target.exists() or any(path.is_file() and path.suffix.lstrip(".").lower() in suffixes
+                                             and is_landscape(path, ffprobe) for path in target.iterdir())
     return "BAD" if bad else "OK"
 
 
