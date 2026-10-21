@@ -8,8 +8,11 @@ GroupBox {
     required property QtObject controller
     signal runOnceRequested(int index)
     title: qsTr("Rules — applied from top to bottom")
+    contentWidth: ruleContents.implicitWidth
+    contentHeight: ruleContents.implicitHeight
 
     ColumnLayout {
+        id: ruleContents
         anchors.fill: parent
         spacing: 8
         Repeater {
@@ -20,29 +23,76 @@ GroupBox {
                 required property var modelData
                 Layout.fillWidth: true
                 Label {
+                    objectName: ruleRow.modelData.id + "Identifier"
+                    Layout.preferredWidth: 32
+                    text: ({
+                        landscape: "H2",
+                        extension: "N4",
+                        rename_images: "F8",
+                        rename_videos: "N2",
+                        photo_extensions: "J1",
+                        video_extensions: "S6",
+                        remove_empty_dirs: "K9",
+                        landscape_images: "B7"
+                    })[ruleRow.modelData.id]
+                }
+                Label {
+                    objectName: ruleRow.modelData.id + "CheckStatus"
+                    Layout.preferredWidth: 40
+                    text: panel.controller.checkStatuses[ruleRow.modelData.id] === undefined
+                        ? "-" : panel.controller.checkStatuses[ruleRow.modelData.id]
+                    Accessible.name: qsTr("Check status")
+                }
+                Label {
+                    objectName: ruleRow.modelData.id + "RuleType"
                     Layout.preferredWidth: 64
-                    text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "extension"
+                    text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "landscape_images"
+                        || ruleRow.modelData.id === "extension" || ruleRow.modelData.id === "photo_extensions"
+                        || ruleRow.modelData.id === "video_extensions"
                         ? qsTr("file") : qsTr("folder")
+                }
+                Label {
+                    objectName: ruleRow.modelData.id + "MediaType"
+                    Layout.preferredWidth: 64
+                    text: ({
+                        landscape: qsTr("video"),
+                        extension: qsTr("other"),
+                        rename_images: qsTr("image"),
+                        rename_videos: qsTr("video"),
+                        photo_extensions: qsTr("image"),
+                        video_extensions: qsTr("video"),
+                        remove_empty_dirs: qsTr("other"),
+                        landscape_images: qsTr("image")
+                    })[ruleRow.modelData.id]
                 }
                 CheckBox {
                     objectName: ruleRow.modelData.id + "Enabled"
                     Layout.fillWidth: true
                     text: ({
-                        landscape: qsTr("Landscape and square media (ratio ≥ 1)"),
-                        extension: qsTr("Group all files by extension"),
-                        rename_images: qsTr("Rename image / images folders to %1").arg(panel.controller.imageFolder),
-                        rename_videos: qsTr("Rename video / videos folders to %1").arg(panel.controller.videoFolder),
-                        photo_extensions: qsTr("Move image extension folders into %1").arg(panel.controller.imageFolder),
-                        video_extensions: qsTr("Move video extension folders into %1").arg(panel.controller.videoFolder)
+                        landscape: qsTr("Landscape and square videos"),
+                        landscape_images: qsTr("Landscape and square images"),
+                        extension: qsTr("Group loose files by extension"),
+                        rename_images: qsTr("Single images folder"),
+                        rename_videos: qsTr("Single videos folder"),
+                        photo_extensions: qsTr("Move images into images folder"),
+                        video_extensions: qsTr("Move videos into videos folder"),
+                        remove_empty_dirs: qsTr("Remove empty dirs")
                     })[ruleRow.modelData.id]
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
                 }
                 Button {
+                    objectName: ruleRow.modelData.id + "Check"
+                    text: qsTr("Check")
+                    enabled: !panel.controller.running && panel.controller.folder.length > 0
+                    onClicked: panel.controller.checkRule(ruleRow.modelData.id)
+                }
+                Button {
                     objectName: ruleRow.modelData.id + "RunOnce"
                     text: qsTr("Run Once")
                     enabled: !panel.controller.running && panel.controller.folder.length > 0
-                        && (ruleRow.modelData.id !== "landscape" || panel.controller.landscapeFolder.length > 0)
+                        && ((ruleRow.modelData.id !== "landscape" && ruleRow.modelData.id !== "landscape_images")
+                            || panel.controller.landscapeFolder.length > 0)
                     onClicked: panel.runOnceRequested(ruleRow.index)
                 }
                 Button {
@@ -58,11 +108,6 @@ GroupBox {
                     onClicked: panel.controller.moveRule(ruleRow.index, 1)
                 }
             }
-        }
-        Label {
-            Layout.fillWidth: true
-            text: qsTr("File rules add destination subfolders. Folder rules rename or move existing folders in sequence. Folder names match without regard to case.")
-            wrapMode: Text.WordWrap
         }
     }
 }

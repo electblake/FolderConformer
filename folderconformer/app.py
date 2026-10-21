@@ -21,6 +21,7 @@ from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
 class Controller(QObject):
     configurationChanged = Signal()
+    checkStatusesChanged = Signal()
     runningChanged = Signal()
     runStateChanged = Signal()
     output = Signal(str)
@@ -33,8 +34,10 @@ class Controller(QObject):
     def __init__(self, folder=None):
         super().__init__()
         self.restart_requested = False
+        self._check_statuses = {}
         self._updates = Updates(self)
         self._run_state = ""
+        self._kind = ""
         self._waiting = False
         settings_path = user_config_path("FolderConformer", appauthor=False) / "FolderConformer.ini"
         self.location_settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
@@ -44,7 +47,6 @@ class Controller(QObject):
         self.settings.setFallbacksEnabled(False)
         self._theme = self.settings.value("appearance/theme", "blender", type=str)
         self._folder = self.settings.value("folder", "", type=str)
-        self._include_subdirectories = self.settings.value("includeSubdirectories", False, type=bool)
         self._enumerate_conflicts = self.settings.value("enumerateConflicts", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
@@ -58,6 +60,10 @@ class Controller(QObject):
                 "landscape", "extension", "rename_images", "rename_videos", "photo_extensions", "video_extensions",
             )]), type=str
         ))
+        if not any(rule["id"] == "remove_empty_dirs" for rule in self._rules):
+            self._rules.append({"id": "remove_empty_dirs", "enabled": True})
+        if not any(rule["id"] == "landscape_images" for rule in self._rules):
+            self._rules.append({"id": "landscape_images", "enabled": True})
         if folder is not None:
             self.folder = folder
         self.process = QProcess(self)
@@ -77,7 +83,6 @@ class Controller(QObject):
     def save(self):
         self.settings.setValue("appearance/theme", self._theme)
         self.settings.setValue("folder", self._folder)
-        self.settings.setValue("includeSubdirectories", self._include_subdirectories)
         self.settings.setValue("enumerateConflicts", self._enumerate_conflicts)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
         self.settings.setValue("videoFolder", self._video_folder)
@@ -116,6 +121,8 @@ class Controller(QObject):
     @folder.setter
     def folder(self, value):
         self._folder = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -125,15 +132,8 @@ class Controller(QObject):
     @landscapeFolder.setter
     def landscapeFolder(self, value):
         self._landscape_folder = value
-        self.save()
-
-    @Property(bool, notify=configurationChanged)
-    def includeSubdirectories(self):
-        return self._include_subdirectories
-
-    @includeSubdirectories.setter
-    def includeSubdirectories(self, value):
-        self._include_subdirectories = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(bool, notify=configurationChanged)
@@ -166,6 +166,8 @@ class Controller(QObject):
     @videoFolder.setter
     def videoFolder(self, value):
         self._video_folder = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -175,6 +177,8 @@ class Controller(QObject):
     @imageFolder.setter
     def imageFolder(self, value):
         self._image_folder = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -184,6 +188,8 @@ class Controller(QObject):
     @videoExtensions.setter
     def videoExtensions(self, value):
         self._video_extensions = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -193,11 +199,30 @@ class Controller(QObject):
     @imageExtensions.setter
     def imageExtensions(self, value):
         self._image_extensions = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property("QVariantList", notify=configurationChanged)
     def rules(self):
         return self._rules
+
+    @Property("QVariantMap", notify=checkStatusesChanged)
+    def checkStatuses(self):
+        return self._check_statuses
+
+    @Slot(str)
+    def checkRule(self, rule_id):
+        self._check_statuses[rule_id] = "-"
+        self.checkStatusesChanged.emit()
+        self._run_state = ""
+        self.runStateChanged.emit()
+        self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
+                               self._video_extensions, self._image_extensions])
+
+    @Property(bool, notify=runningChanged)
+    def checking(self):
+        return self.running and self._kind == "check"
 
     @Property(bool, notify=runningChanged)
     def running(self):
@@ -265,13 +290,13 @@ class Controller(QObject):
     def start(self, index=-1):
         self._run_state = ""
         self._waiting = False
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.runStateChanged.emit()
         rules = self._rules if index == -1 else [{"id": self._rules[index]["id"], "enabled": True}]
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      "--controlled"]
-        if self._include_subdirectories:
-            arguments.append("--recursive")
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -297,6 +322,11 @@ class Controller(QObject):
         lines = self.pending.split("\n")
         self.pending = lines.pop()
         for line in lines:
+            if self._kind == "check" and line.startswith("Check: "):
+                _, rule_id, status = line.split()
+                self._check_statuses[rule_id] = status
+                self.checkStatusesChanged.emit()
+                continue
             if line.rstrip("\r") == "Control: ready":
                 if self._run_state in ("pausing", "paused"):
                     self._waiting = True
@@ -321,6 +351,9 @@ class Controller(QObject):
         self.output.emit(self.pending + self.decoder.decode(b"", final=True))
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
+        elif self._kind == "check":
+            self._run_state = ""
+            self.runStateChanged.emit()
         else:
             self._waiting = False
             self._run_state = "cancelled" if self._run_state == "cancelling" else "stopped" if code == 2 else ""
@@ -448,6 +481,14 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
         from folderconformer.integrations import install
         return install()
+    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+        from folderconformer.pipeline import check_rule
+        status = check_rule(Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
+                            Path(get_platform_dir()) / "ffprobe.exe")
+        print(f"Check: {sys.argv[3]} {status}", flush=True)
+        return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
@@ -455,7 +496,7 @@ def main():
         tools = Path(get_platform_dir())
         control = RunControl() if "--controlled" in sys.argv[9:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
-                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], recursive="--recursive" in sys.argv[9:],
+                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8],
                 control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[9:])
         return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)

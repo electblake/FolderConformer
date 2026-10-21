@@ -58,17 +58,25 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
         "-frames:v", "1", str(media / "wide.png"),
     ], env=environment, check=True)
     rules = [{"id": rule_id, "enabled": True} for rule_id in (
-        "landscape", "extension", "rename_images", "rename_videos", "photo_extensions", "video_extensions",
+        "rename_images", "rename_videos", "extension", "photo_extensions", "video_extensions",
+        "landscape", "landscape_images", "remove_empty_dirs",
     )]
     result = subprocess.run([
         str(python), "-I", "-m", "folderconformer", "--worker", str(media), json.dumps(rules), "Landscape-FULL",
         "video/", "photo/", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
         "jpg;jpeg;png;webp;heic",
     ], env=environment, cwd=work, check=True, stdout=subprocess.PIPE, encoding="utf-8")
-    assert (media / "Landscape-FULL/png/wide.png").is_file()
-    for name in ("photo/photo.bin", "video/video.bin", "photo/jpg/image.bin", "video/mp4/movie.bin"):
+    assert (media / "photo/Landscape-FULL/wide.png").is_file()
+    for name in ("photo/photo.bin", "video/video.bin", "photo/image.bin", "video/movie.bin"):
         assert (media / name).read_bytes() == b"preserved"
-    assert "2 folders renamed, 2 folders moved." in result.stdout
+    assert "2 folders renamed." in result.stdout
+    for rule_id in ("rename_images", "rename_videos", "photo_extensions", "video_extensions",
+                    "landscape", "landscape_images", "remove_empty_dirs", "extension"):
+        checked = subprocess.run([
+            str(python), "-I", "-m", "folderconformer", "--check", str(media), rule_id,
+            "video/", "photo/", "mp4", "png",
+        ], env=environment, cwd=work, check=True, capture_output=True, text=True)
+        assert checked.stdout.strip() == f"Check: {rule_id} OK", checked.stdout
     process = QProcess()
     qt_environment = QProcessEnvironment()
     for key, value in environment.items():
@@ -85,4 +93,4 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     subprocess.run([str(install / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
     assert not runtime.exists()
     assert not (install / "source").exists()
-print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, six rules, GUI, reinstall, uninstall.")
+print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, eight rules and checks, GUI, reinstall, uninstall.")

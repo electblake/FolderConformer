@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-21
+
+### Added
+
+- Added an image/video/other media-type column after each rule's file/folder type.
+- Added N4, F8, and N2 checks for remaining loose files and immediate folders needing renaming; every rule now has a Check action.
+- Added H2 and B7 checks: BAD while landscape or square files remain in their media folders, including skipped conflicts; OK when none remain.
+- Added B7 to move landscape and square images directly inside the configured photo folder into its landscape subfolder.
+
+- Added permanent, randomly assigned letter–number rule identifiers before the file/folder labels, unchanged by reordering or restarts.
+- Added a check-status column after each rule identifier, showing `-` for unchecked/unknown, and a Check button before Run Once.
+- Added J1 and S6 checks showing BAD while files remain to move and OK when clear, including skipped name conflicts.
+- Added K9 (Remove empty dirs), with recursive removal of empty subdirectories and a check for remaining empty directories.
+
+### Changed
+
+- Renamed F8/N2 to Single images folder / Single videos folder; create missing configured destinations, rename legacy folders, and merge existing contents while respecting name conflicts. Their checks include missing destinations and pending merges.
+- Removed configured paths from rule names.
+- Restricted H2 to configured video extensions directly inside the video folder, with landscape output inside that folder; preserved aspect-ratio and name-conflict handling.
+- Renamed N4 to Group loose files by extension and limited file grouping to the input folder root.
+- Made scan depth rule-specific: root-level file and rename rules, bounded J1/S6 scans, and recursive K9 cleanup.
+- Changed J1 to move root image files and files directly inside image-extension folders at the root or inside the configured photo folder into that photo folder, respecting name-conflict settings without recursive scanning.
+- Changed S6 to move root video files and files directly inside video-extension folders at the root or inside the configured video folder into that video folder, respecting name-conflict settings without recursive scanning.
+
+### Removed
+
+- Removed the explanatory footer from the rules panel.
+- Removed Include subdirectories, its saved setting access, worker option, global recursive traversal, and obsolete UI text.
+- Removed the unused folder-move branch and counter from processing summaries.
+
+### Fixed
+
+- Kept rule names readable in narrow windows with horizontal scrolling for the rules table.
+- Corrected J1 and S6 to show file as their operation type.
+- Moved checks into a worker process so media probing and directory scans do not block the UI.
+- Cleared previous results before rechecking and after landscape-folder changes; failed checks retain unknown status and expose their worker error.
+
 ## [0.6.4] - 2026-10-20
 
 ### Changed

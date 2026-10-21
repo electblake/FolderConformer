@@ -223,6 +223,30 @@ class DockingTests(unittest.TestCase):
         self.assertTrue(scroll.widgetResizable())
         self.assertGreaterEqual(self.quick.width(), 640)
 
+    def test_rule_columns_remain_readable_in_narrow_window(self):
+        self.host.resize(900, 600)
+        APP.processEvents()
+        scroll = self.quick.findChild(QObject, "settingsScroll")
+        self.assertGreater(scroll.property("contentWidth"), scroll.property("availableWidth"))
+        expected_media = {"landscape": "video", "extension": "other", "rename_images": "image",
+                          "rename_videos": "video", "photo_extensions": "image", "video_extensions": "video",
+                          "remove_empty_dirs": "other", "landscape_images": "image"}
+        pending = [self.quick.contentItem()]
+        controls = {}
+        while pending:
+            item = pending.pop()
+            controls[item.objectName()] = item
+            pending.extend(item.childItems())
+        for rule_id, media in expected_media.items():
+            name = controls[rule_id + "Enabled"]
+            self.assertGreaterEqual(name.width(), name.implicitWidth())
+            media_label = controls[rule_id + "MediaType"]
+            self.assertEqual(media_label.property("text"), media)
+            self.assertLess(controls[rule_id + "RuleType"].x(), media_label.x())
+            self.assertLess(media_label.x(), name.x())
+        for rule_id in ("photo_extensions", "video_extensions"):
+            self.assertEqual(controls[rule_id + "RuleType"].property("text"), "file")
+
     def test_layout_restores_in_fresh_process_after_close_and_restart(self):
         script = r"""
 import json, sys

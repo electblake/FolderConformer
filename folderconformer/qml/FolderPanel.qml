@@ -11,28 +11,19 @@ GroupBox {
     contentHeight: folderContent.implicitHeight
     contentWidth: folderContent.implicitWidth
 
-    ColumnLayout {
+    RowLayout {
         id: folderContent
         anchors.fill: parent
-        RowLayout {
+        TextField {
+            objectName: "inputFolder"
             Layout.fillWidth: true
-            TextField {
-                objectName: "inputFolder"
-                Layout.fillWidth: true
-                text: panel.controller.folder
-                Accessible.name: qsTr("Input folder path")
-                onTextEdited: panel.controller.folder = text
-            }
-            Button {
-                text: qsTr("Browse…")
-                onClicked: panel.choosing = true
-            }
+            text: panel.controller.folder
+            Accessible.name: qsTr("Input folder path")
+            onTextEdited: panel.controller.folder = text
         }
-        CheckBox {
-            objectName: "includeSubdirectories"
-            text: qsTr("Include subdirectories")
-            checked: panel.controller.includeSubdirectories
-            onToggled: panel.controller.includeSubdirectories = checked
+        Button {
+            text: qsTr("Browse…")
+            onClicked: panel.choosing = true
         }
     }
     Loader {

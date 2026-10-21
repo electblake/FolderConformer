@@ -25,15 +25,17 @@ Pane {
         ScrollView {
             id: settingsScroll
             objectName: "settingsScroll"
+            implicitWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: 800
-            contentWidth: availableWidth
+            contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
             clip: true
             ColumnLayout {
-                width: settingsScroll.availableWidth
+                width: settingsScroll.contentWidth
                 spacing: 12
                 RulesPanel {
+                    id: rulesPanel
                     Layout.fillWidth: true
                     controller: screen.controller
                     enabled: !screen.controller.running
@@ -48,19 +50,12 @@ Pane {
                 }
             }
         }
-        Label {
-            Layout.fillWidth: true
-            text: screen.controller.includeSubdirectories
-                ? qsTr("Includes subdirectories. File rules organize files under the input folder; folder rules also process nested folders.")
-                : qsTr("File rules process files directly in this folder. Folder rules rename or move its immediate subfolders.")
-            wrapMode: Text.WordWrap
-        }
         RowLayout {
             Layout.fillWidth: true
             Button {
                 text: qsTr("Execute rules")
                 enabled: !screen.controller.running && screen.controller.folder.length > 0
-                    && (!screen.controller.rules.some(rule => rule.id === "landscape" && rule.enabled)
+                    && (!screen.controller.rules.some(rule => (rule.id === "landscape" || rule.id === "landscape_images") && rule.enabled)
                         || screen.controller.landscapeFolder.length > 0)
                 onClicked: {
                     log.clear()
@@ -75,14 +70,14 @@ Pane {
                 objectName: "pauseProcessing"
                 text: screen.controller.runState === "paused" || screen.controller.runState === "pausing"
                     ? qsTr("Resume") : qsTr("Pause")
-                enabled: screen.controller.running && screen.controller.runState !== "stopping"
+                enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
                     && screen.controller.runState !== "cancelling"
                 onClicked: screen.controller.pause()
             }
             Button {
                 objectName: "stopProcessing"
                 text: qsTr("Stop")
-                enabled: screen.controller.running && screen.controller.runState !== "stopping"
+                enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
                     && screen.controller.runState !== "cancelling"
                 onClicked: screen.controller.stop()
             }
@@ -114,7 +109,7 @@ Pane {
             from: 0
             to: screen.total
             value: screen.processed
-            visible: screen.controller.running
+            visible: screen.controller.running && !screen.controller.checking
         }
         Label {
             text: screen.controller.runState === "pausing" ? qsTr("Pausing after current rules…")
