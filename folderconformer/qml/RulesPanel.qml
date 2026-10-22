@@ -69,8 +69,8 @@ GroupBox {
                     objectName: ruleRow.modelData.id + "Enabled"
                     Layout.fillWidth: true
                     text: ({
-                        landscape: qsTr("Landscape and square videos"),
-                        landscape_images: qsTr("Landscape and square images"),
+                        landscape: qsTr("Move landscape and square videos"),
+                        landscape_images: qsTr("Move landscape and square images"),
                         extension: qsTr("Group loose files by extension"),
                         rename_images: qsTr("Single images folder"),
                         rename_videos: qsTr("Single videos folder"),

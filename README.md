@@ -6,12 +6,12 @@ A basic Windows Qt Quick application for moving files into folders using an orde
 
 Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Execute rules**. Rules define their own scan depth: N4 processes loose files at the input root, H2 and B7 process direct files in their configured video and photo folders, F8 and N2 create or consolidate their media folders, J1 and S6 inspect their specific extension folders, and K9 removes empty directories recursively.
 
-Each rule has a permanent, randomly assigned letter–number identifier before its file/folder label: **H2** landscape and square videos, **N4** group loose files by extension, **F8** single images folder, **N2** single videos folder, **J1** move image file extensions, **S6** move video file extensions, and **K9** remove empty directories, and **B7** landscape and square images. Identifiers stay with their rules across reordering and restarts and do not indicate execution order.
+Each rule has a permanent, randomly assigned letter–number identifier before its file/folder label: **H2** move landscape and square videos, **N4** group loose files by extension, **F8** single images folder, **N2** single videos folder, **J1** move image file extensions, **S6** move video file extensions, and **K9** remove empty directories, and **B7** move landscape and square images. Identifiers stay with their rules across reordering and restarts and do not indicate execution order.
 
 Choose **Help > Install for File Explorer**, then **Install**, to add **Open in FolderConformer** to right-click menus for folders, folder backgrounds, and drives for your Windows account. Explorer opens the selected directory in the folder field without starting processing. Reinstalling updates the same menu entries.
 
-- **H2 — Landscape and square videos:** inspect matching video files directly inside the configured video folder. Files with displayed width/height ≥ 1 move into its configured landscape subfolder (default `video/Landscape-FULL/`).
-- **B7 — Landscape and square images:** apply the same aspect-ratio behavior to matching image files directly inside the configured photo folder (default destination `photo/Landscape-FULL/`). Both rules use their configured extension lists, account for sample aspect ratio and rotation through ffprobe, and respect Resolve name conflicts. Portraits, other file types, input-root media, and deeper subfolders stay in place. Neither rule is recursive.
+- **H2 — Move landscape and square videos:** inspect matching video files directly inside the configured video folder. Files with displayed width/height ≥ 1 move into its configured landscape subfolder (default `video/Landscape-FULL/`).
+- **B7 — Move landscape and square images:** apply the same aspect-ratio behavior to matching image files directly inside the configured photo folder (default destination `photo/Landscape-FULL/`). Both rules use their configured extension lists, account for sample aspect ratio and rotation through ffprobe, and respect Resolve name conflicts. Portraits, other file types, input-root media, and deeper subfolders stay in place. Neither rule is recursive.
 - **N4 — Group loose files by extension:** only files directly in the input folder go into lowercase final-extension folders, such as `txt` or `png`. Files without an extension go into `no-extension`.
 
 - **F8 — Single images folder:** create the configured images folder if missing, or rename an immediate `image`/`images` folder into it. Merge remaining aliases into the destination, preserving nested contents.
@@ -54,7 +54,7 @@ $env:ISCC_PATH = 'C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
 mise run build
 ```
 
-The build compiles `dist/installer/FolderConformer-0.7.1-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
+The build compiles `dist/installer/FolderConformer-0.7.2-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
 
 `platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
 

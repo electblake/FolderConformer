@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-22
+
+### Changed
+
+- Renamed H2 and B7 to "Move landscape and square videos" and "Move landscape and square images".
+
 ## [0.7.1] - 2026-10-21
 
 ### Added
