@@ -52,7 +52,7 @@ class DockingTests(unittest.TestCase):
         self.assertIsNone(self.quick.findChild(QObject, "inputFolder"))
         self.host.activateWindow()
         field.setFocus()
-        value = r"C:\media\日本語 é"
+        value = r"C:\media\æ—¥æœ¬èªž Ã©"
         APP.sendEvent(field, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, value))
         self.assertEqual(self.controller.folder, value)
         self.assertEqual(Controller().folder, value)
@@ -101,7 +101,7 @@ class DockingTests(unittest.TestCase):
         dock.setFloating(True)
         QTest.qWait(50)
         self.assertTrue(dock.isFloating())
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         dock.close()
         menu = self.quick.findChild(QObject, "previewMenu")
         self.assertFalse(menu.property("checked"))
@@ -109,7 +109,7 @@ class DockingTests(unittest.TestCase):
         QMetaObject.invokeMethod(menu, "triggered")
         self.assertTrue(dock.isVisible())
         self.assertTrue(menu.property("checked"))
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         dock.setFloating(False)
         self.host.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         self.host.tabifyDockWidget(self.host.files_dock, dock)
@@ -150,7 +150,7 @@ class DockingTests(unittest.TestCase):
         self.assertTrue(expand.hasActiveFocus())
         QTest.keyClick(self.host.preview, Qt.Key.Key_Space)
         QTest.qWait(50)
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         QTest.keyClick(self.host.preview, Qt.Key.Key_Backtab)
         self.assertTrue(collapse.hasActiveFocus())
         QTest.keyClick(self.host.preview, Qt.Key.Key_Space)
@@ -165,11 +165,40 @@ class DockingTests(unittest.TestCase):
             text = button.property("contentItem").property("color")
             self.assertGreater(abs(text.lightnessF() - background.lightnessF()), 0.3)
 
+    def test_audio_dock_settings_visibility_busy_and_reset(self):
+        dock = self.host.audio_dock
+        self.assertEqual(dock.objectName(), "audioDock")
+        self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
+        self.assertGreaterEqual(dock.y(), self.host.files_dock.y() + self.host.files_dock.height())
+        self.host.music_threshold.setValue(0.75)
+        self.host.folder_fields["musicVideoFolder"].textEdited.emit("Tunes")
+        restored = Controller()
+        self.assertEqual(restored.musicThreshold, 0.75)
+        self.assertEqual(restored.musicVideoFolder, "Tunes")
+        self.assertEqual(self.controller.targetTree.item(1).child(1).text(), "Tunes")
+        self.controller.updates._busy = True
+        self.controller.updates.changed.emit()
+        self.assertFalse(self.host.music_threshold.isEnabled())
+        self.controller.updates._busy = False
+        self.controller.updates.changed.emit()
+        dock.setFloating(True)
+        dock.close()
+        self.assertFalse(self.quick.property("audioVisible"))
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "audioMenu"), "triggered")
+        self.assertTrue(dock.isVisible())
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "resetLayoutMenu"), "triggered")
+        APP.processEvents()
+        self.assertFalse(dock.isFloating())
+        self.assertGreaterEqual(dock.y(), self.host.files_dock.y() + self.host.files_dock.height())
+        dock.setFloating(True)
+        self.host.close()
+        self.assertFalse(dock.isVisible())
+
     def test_native_dock_moves_floats_closes_and_reopens(self):
         dock = self.host.folders_dock
         self.assertIsInstance(dock, QDockWidget)
         self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
-        self.assertEqual(len(dock.findChildren(QLineEdit)), 4)
+        self.assertEqual(len(dock.findChildren(QLineEdit)), 5)
         self.assertIsNone(self.quick.findChild(QObject, "ruleFoldersPanel"))
         dock.setFloating(True)
         QTest.qWait(30)
@@ -198,11 +227,11 @@ class DockingTests(unittest.TestCase):
         model = self.controller.targetTree
         self.assertEqual(model.rowCount(), 3)
         self.assertEqual([model.item(row).text() for row in range(3)], ["photo/", "video/", "Data/"])
-        self.assertEqual([model.item(row).rowCount() for row in range(3)], [6, 20, 3])
+        self.assertEqual([model.item(row).rowCount() for row in range(3)], [6, 21, 3])
         self.assertEqual([model.item(2).child(row).text() for row in range(3)], ["file.csv", "file.db", "file.txt"])
         self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Landscape-FULL"] * 2)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         preview = self.host.preview.rootObject()
         rules = self.quick.findChild(QObject, "rulesPanel")
         self.assertLessEqual(self.host.preview_dock.x() + self.host.preview_dock.width(),
@@ -218,13 +247,13 @@ class DockingTests(unittest.TestCase):
         APP.processEvents()
         self.assertIs(self.controller.targetTree, model)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 45)
+        self.assertEqual(tree.property("rows"), 65)
         self.assertEqual([model.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
         self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Wide media"] * 2)
         QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 0))
         QTest.qWait(50)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         restored_controller = Controller()
         restored = restored_controller.targetTree
         self.assertEqual([restored.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
@@ -248,7 +277,7 @@ class DockingTests(unittest.TestCase):
         self.assertEqual([data.child(row).text() for row in range(4)],
                          ["file.txt", "file.csv", "file.json", "file.xml"])
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 9)
+        self.assertEqual(tree.property("rows"), 10)
         self.assertGreaterEqual(tree.height(), tree.property("implicitHeight") - 1)
         self.assertFalse(data.child(0).isEditable())
         restored = Controller()
@@ -258,12 +287,12 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(data.rowCount(), 1)
         self.assertEqual(data.child(0).text(), "file.csv")
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 6)
+        self.assertEqual(tree.property("rows"), 7)
         self.controller.dataExtensions = ""
         QTest.qWait(50)
         self.assertEqual(data.rowCount(), 0)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 5)
+        self.assertEqual(tree.property("rows"), 6)
 
     def test_media_previews_track_extensions_in_roots_and_landscape_folders(self):
         tree = self.host.preview.rootObject().findChild(QObject, "targetTree")
@@ -283,24 +312,24 @@ class DockingTests(unittest.TestCase):
                 QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
                 QTest.keyClicks(field, value)
                 QTest.qWait(50)
-                self.assertEqual([media.child(row).text() for row in range(1, media.rowCount())], expected)
+                self.assertEqual([media.child(row).text() for row in range(1 + root_row, media.rowCount())], expected)
                 self.assertIs(media.child(0), landscape)
                 self.assertEqual(landscape.text(), "Landscape-FULL")
                 self.assertEqual([landscape.child(row).text() for row in range(landscape.rowCount())], expected)
                 self.assertTrue(all(not landscape.child(row).isEditable() for row in range(landscape.rowCount())))
                 self.assertTrue(all(not media.child(row).isEditable() for row in range(media.rowCount())))
                 restored = Controller()
-                self.assertEqual(restored.targetTree.item(root_row).child(3).text(), expected[2])
+                self.assertEqual(restored.targetTree.item(root_row).child(3 + root_row).text(), expected[2])
                 self.assertEqual(restored.targetTree.item(root_row).child(0).child(2).text(), expected[2])
                 setattr(self.controller, name, "")
-                self.assertEqual(media.rowCount(), 1)
+                self.assertEqual(media.rowCount(), 1 + root_row)
                 self.assertIs(media.child(0), landscape)
                 self.assertEqual(landscape.rowCount(), 0)
                 setattr(self.controller, name, value)
         QMetaObject.invokeMethod(self.host.preview.rootObject().findChild(QObject, "openTargetTree"), "clicked")
         QTest.qWait(50)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 20)
+        self.assertEqual(tree.property("rows"), 24)
         self.assertEqual([model.item(2).child(row).text() for row in range(3)],
                          ["file.csv", "file.db", "file.txt"])
 
@@ -374,7 +403,7 @@ class DockingTests(unittest.TestCase):
         QMetaObject.invokeMethod(open_all, "clicked")
         QTest.qWait(50)
         QMetaObject.invokeMethod(tree, "forceLayout")
-        self.assertEqual(tree.property("rows"), 56)
+        self.assertEqual(tree.property("rows"), 76)
         self.assertGreater(tree.property("contentHeight"), tree.height())
         self.assertTrue(self.host.preview.rootObject().findChild(QObject, "targetTreeScrollBar").property("visible"))
         tree.setProperty("contentY", 120)
@@ -412,7 +441,7 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(tree.property("rows"), 9)
 
     def test_folder_edits_persist_update_rules_and_keep_keyboard_order(self):
-        values = {"landscapeFolder": "Wide media é", "videoFolder": "Clips/", "imageFolder": "Pictures/", "dataFolder": "Records/"}
+        values = {"landscapeFolder": "Wide media Ã©", "videoFolder": "Clips/", "imageFolder": "Pictures/", "dataFolder": "Records/"}
         fields = list(self.host.folder_fields.values())
         self.host.activateWindow()
         for name, value in values.items():
@@ -428,7 +457,7 @@ class DockingTests(unittest.TestCase):
         QTest.keyClick(fields[1], Qt.Key.Key_Tab)
         self.assertTrue(fields[2].hasFocus())
         self.controller.videoFolder = "Updated/"
-        self.assertEqual(fields[1].text(), "Updated/")
+        self.assertEqual(self.host.folder_fields["videoFolder"].text(), "Updated/")
         self.assertEqual(fields[0].validator().validate("bad/name", 0)[0], QValidator.State.Invalid)
 
     def test_files_dock_starts_below_folders_and_reopens_independently(self):
@@ -640,7 +669,7 @@ def inspect():
             host.resizeDocks([host.folders_dock], [340], Qt.Horizontal)
             host.resizeDocks([host.folders_dock, host.files_dock], [450, 300], Qt.Vertical)
         else:
-            for index, dock in enumerate((host.folders_dock, host.files_dock, host.input_dock, host.preview_dock)):
+            for index, dock in enumerate((host.folders_dock, host.files_dock, host.input_dock, host.preview_dock, host.audio_dock)):
                 dock.setFloating(True)
                 dock.setGeometry(160 + index * 400, 180, 350, 420)
             if sys.argv[3] == "folders_closed":
@@ -649,6 +678,8 @@ def inspect():
                 host.preview_dock.close()
             if sys.argv[3] == "input_closed":
                 host.input_dock.close()
+            if sys.argv[3] == "audio_closed":
+                host.audio_dock.close()
             if sys.argv[3] == "files_closed":
                 host.files_dock.close()
     QTest.qWait(100)
@@ -657,7 +688,7 @@ def inspect():
         [dock.objectName(), host.dockWidgetArea(dock).value, dock.isFloating(),
          dock.isVisible(), dock.geometry().getRect(),
          quick.findChild(QObject, menu).property("checked")]
-        for dock, menu in ((host.folders_dock, "foldersMenu"), (host.files_dock, "filesMenu"), (host.input_dock, "inputFolderMenu"), (host.preview_dock, "previewMenu"))
+        for dock, menu in ((host.folders_dock, "foldersMenu"), (host.files_dock, "filesMenu"), (host.input_dock, "inputFolderMenu"), (host.preview_dock, "previewMenu"), (host.audio_dock, "audioMenu"))
     ]
     if sys.argv[4] == "restart":
         controller.restart()
@@ -667,14 +698,16 @@ QTimer.singleShot(100, inspect)
 qt.exec()
 print(json.dumps(result))
 """
-        for scenario in ("docked", "floating", "folders_closed", "files_closed", "input_closed", "preview_closed"):
+        for scenario in ("docked", "floating", "folders_closed", "files_closed", "input_closed", "preview_closed", "audio_closed"):
             for shutdown in ("close", "restart"):
                 with self.subTest(scenario=scenario, shutdown=shutdown):
                     with tempfile.TemporaryDirectory() as directory:
                         saved = subprocess.run(
                             [sys.executable, "-c", script, directory, "save", scenario, shutdown],
-                            check=True, capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, timeout=15)
+                        self.assertEqual(saved.returncode, 0, saved.stderr)
                         restored = subprocess.run(
                             [sys.executable, "-c", script, directory, "restore", scenario, "close"],
-                            check=True, capture_output=True, text=True, timeout=15)
+                            capture_output=True, text=True, timeout=15)
+                        self.assertEqual(restored.returncode, 0, restored.stderr)
                         self.assertEqual(json.loads(restored.stdout), json.loads(saved.stdout))

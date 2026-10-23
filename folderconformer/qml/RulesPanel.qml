@@ -37,6 +37,7 @@ GroupBox {
                         remove_empty_dirs: "K9",
                         landscape_images: "B7",
                         data_extensions: "R3",
+                        music_videos: "M5",
                         flatten_videos: "V1",
                         flatten_images: "I1",
                         non_video_to_root: "V2",
@@ -56,6 +57,7 @@ GroupBox {
                     text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "landscape_images"
                         || ruleRow.modelData.id === "extension" || ruleRow.modelData.id === "photo_extensions"
                         || ruleRow.modelData.id === "video_extensions" || ruleRow.modelData.id === "data_extensions"
+                        || ruleRow.modelData.id === "music_videos"
                         || ruleRow.modelData.id === "non_video_to_root" || ruleRow.modelData.id === "non_image_to_root"
                         ? qsTr("file") : qsTr("folder")
                 }
@@ -72,6 +74,7 @@ GroupBox {
                         remove_empty_dirs: qsTr("other"),
                         landscape_images: qsTr("image"),
                         data_extensions: qsTr("other"),
+                        music_videos: qsTr("video"),
                         flatten_videos: qsTr("video"),
                         flatten_images: qsTr("image"),
                         non_video_to_root: qsTr("video"),
@@ -91,6 +94,7 @@ GroupBox {
                         photo_extensions: qsTr("Move images into images folder"),
                         video_extensions: qsTr("Move videos into videos folder"),
                         remove_empty_dirs: qsTr("Remove empty dirs"),
+                        music_videos: qsTr("Move videos containing music"),
                         flatten_videos: qsTr("Flatten videos folder"),
                         flatten_images: qsTr("Flatten images folder"),
                         non_video_to_root: qsTr("Move non-video files to root"),

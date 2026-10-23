@@ -1,6 +1,6 @@
 # Video music detection: FolderConformer implementation plan
 
-Reviewed 2026-10-23. Planning only; implementation waits until the other active changes are finished and committed. Re-read the committed rules, docks, worker protocol, and installer before editing them. The inspected checkout had concurrent changes in app.py, QML, tests, and CHANGELOG.md.
+Reviewed 2026-10-23. The prerequisite changes and this plan were committed before implementation began. Implementation and measured limitations are recorded in [music-detection-results.md](music-detection-results.md). The plan below records the intended scope; its proposed accuracy target must not be confused with a verified model capability.
 
 ## Complete outcome
 
@@ -35,7 +35,7 @@ Add a small `folderconformer/music.py` integration module consistent with the ex
 2. Analyze all audio streams and each channel independently. Do not average channels, which can cancel opposite-polarity audio. No audio streams is a valid no-music case, not a decoder failure.
 3. Use the installed FFmpeg to decode and resample to normalized 16 kHz float32 PCM, preserving channels. Use one decoder path, with its normal nonzero-exit behavior. No alternative decoder, online service, or runtime download.
 4. Feed bounded contexts to the original SavedModel. Preserve its global 0.48-second frame grid and sufficient waveform overlap; apply model end padding only at the actual end. Compare chunked predictions against the original model called on complete short recordings. Do not use independent arbitrary chunks that manufacture internal padded boundaries.
-5. Scan the complete recording. Retain bounded audio and feature memory; collect compact evidence with stream, channel, class, score, and timestamps. Include start-time offsets when reporting video-relative evidence.
+5. Scan the complete recording. Retain bounded audio and feature memory; collect compact evidence with stream, channel, class, score, and timestamps. Evidence timestamps are relative to each decoded audio stream; they are not presented as video-timeline timestamps.
 6. Use music-related class scores rather than the top winning class: simultaneous speech must not veto music. The initial semantic mapping is Music, Singing, and Humming. Measure that mapping on a cappella, instrumental, background music, and hard negatives before freezing it.
 7. Decide presence using the maximum selected score across frames, channels, and streams against an evaluated threshold. Do not average away a brief musical passage. Call it a score, not a calibrated file probability.
 8. Integrate the existing worker's progress and pause/stop controls at bounded analysis intervals. Stop must terminate the active decoder and prevent moving the current incompletely analyzed video. A cancelled scan must not produce a negative classification or a completed move.
@@ -49,8 +49,8 @@ Respect the user's fail-fast policy: no new custom exception hierarchy, catching
 Keep the existing source + lockfile online installer architecture. Dependencies and model bytes must not be embedded into the application installer executable.
 
 - Add the qualified TensorFlow dependency to pyproject.toml and resolve its exact dependencies through uv.lock. Existing `packaging/install_runtime.py` installs them using locked uv sync into the private runtime venv.
-- Download the versioned YAMNet archive during Setup, using Inno's download/integrity/extraction support. The reviewed source is `https://tfhub.dev/google/yamnet/1?tf-hub-format=compressed`. Record the actual archive format and uncompressed size for the installer directives; do not mistake compressed length for extracted size.
-- Install the complete model under the app-owned runtime, e.g. `runtime/models/yamnet/1/`. Application code uses that fixed local location. No model picker, first-use download, or reliance on a developer's TensorFlow Hub cache.
+- Download the versioned YAMNet archive during Setup, using Inno's download/integrity support and Python tarfile extraction during setup. The reviewed source is `https://www.kaggle.com/api/v1/models/google/yamnet/tensorFlow2/yamnet/1/download`. Record the actual archive format and uncompressed size for the installer directives; do not mistake compressed length for extracted size.
+- Install the complete model under the app-owned runtime, e.g. `runtime/venv/models/yamnet/1/`. Application code uses that fixed local location. No model picker, first-use download, or reliance on a developer's TensorFlow Hub cache.
 - Pin the artifact digest in installer release inputs. A failed download or extraction fails setup through its native operation, without mirrors or retries. Check the model license and include its required notices before release.
 - Account for TensorFlow's documented native Windows Visual C++ runtime prerequisite in Setup. Use the official redistributable and supported unattended installation, not an assumption that the developer machine represents a clean install.
 - After dependencies and model are installed, run a real local model invocation from the installed interpreter as part of setup verification. Confirm installer exit status propagates failure through the existing setup flow.
@@ -105,7 +105,7 @@ Required tests:
 - Clean Windows setup with no preinstalled app dependencies or model cache; actual installed GUI rule execution on positive and negative videos; then repeat with networking unavailable after setup.
 - Reinstall/upgrade/uninstall, native dependency failures surfacing, and installer payload inspection proving no TensorFlow binaries or model weights were embedded.
 
-Expected touch points: `folderconformer/music.py`, `pipeline.py`, `app.py`, `qml/Main.qml`, `qml/RulesPanel.qml`, target-preview construction, `pyproject.toml`, `uv.lock`, `packaging/installer.iss`, `install_runtime.py`, preparation tooling, `packaging/smoke.py`, focused tests, README, and CHANGELOG. No source implementation, dependency install, app commit, or release was performed during this review.
+Expected touch points: `folderconformer/music.py`, `pipeline.py`, `app.py`, `qml/Main.qml`, `qml/RulesPanel.qml`, target-preview construction, `pyproject.toml`, `uv.lock`, `packaging/installer.iss`, `install_runtime.py`, preparation tooling, `packaging/smoke.py`, focused tests, README, and CHANGELOG. This planning review preceded implementation; consult the linked results for actual implementation and verification evidence.
 
 ## Primary sources
 

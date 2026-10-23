@@ -1,0 +1,90 @@
+[
+  {
+    "id": "vibeace",
+    "url": "https://librosa.org/data/audio/Kevin_MacLeod_-_Vibe_Ace.ogg",
+    "sha256": "6c23aed3dd5aa57f2b1652ecab68d15d9b82ad257f54e639eb2880ca09bc118a",
+    "label": 1,
+    "split": "validation",
+    "attribution": "Vibe Ace by Kevin MacLeod is licensed under a Creative Commons Attribution License.\nFrom the Free Music Archive: https://freemusicarchive.org/music/Kevin_MacLeod/Jazz_Sampler/Vibe_Ace\nCC-BY https://creativecommons.org/licenses/by/3.0/\n"
+  },
+  {
+    "id": "sweetwaltz",
+    "url": "https://librosa.org/data/audio/147793__setuniman__sweet-waltz-0i-22mi.ogg",
+    "sha256": "4baff8ebf1771c33618b58aa12ac3fbac1e0462894ae74247f2fb8e649d1c63b",
+    "label": 1,
+    "split": "validation",
+    "attribution": "sweet waltz 0I_22mi by Setuniman\nhttps://freesound.org/people/Setuniman/sounds/147793/\nwww.freesound.org/people/setuniman/\nCC BY-NC 3.0: https://creativecommons.org/licenses/by-nc/3.0/\n"
+  },
+  {
+    "id": "libri1",
+    "url": "https://librosa.org/data/audio/5703-47212-0000.ogg",
+    "sha256": "a284612b46af0535f7e1873758c4387bb8369f6dbbe192ffdec1f171108f98dd",
+    "label": 0,
+    "split": "validation",
+    "attribution": "Ashiel Mystery - A Detective Story, chapter 2, narrated by Garth Comira\nFrom the LibriSpeech SLR12 collection: https://www.openslr.org/12/\nCC-BY 4.0 https://creativecommons.org/licenses/by/4.0/\n"
+  },
+  {
+    "id": "robin",
+    "url": "https://librosa.org/data/audio/456440__inspectorj__bird-whistling-robin-single-13.ogg",
+    "sha256": "57c2b861d028e25d7c086b48853f20eda1ae9a7a33e1125a1f3bec91539b4208",
+    "label": 0,
+    "split": "validation",
+    "attribution": "Bird Whistling, Robin, Single, 13.wav / InspectorJ\n\nA single chirping call of an English robin bird. Approximately 2 meters from the recorder.\nThe sound was recorded using a \"Zoom H6 (XY) recorder\" on 9th May 2018.\n\nhttps://freesound.org/people/InspectorJ/sounds/456440/\n\nCC-BY 3.0: https://creativecommons.org/licenses/by/3.0/\n"
+  },
+  {
+    "id": "choice",
+    "url": "https://librosa.org/data/audio/admiralbob77_-_Choice_-_Drum-bass.ogg",
+    "sha256": "ac644f9645e7c15174e4a4f8561e4d1448d7f6e59ff6b0556b310ebbced879bc",
+    "label": 1,
+    "split": "test",
+    "attribution": "Choice by Admiral Bob (c) copyright 2020 Licensed under a Creative Commons Attribution Noncommercial  (3.0) license. http://dig.ccmixter.org/files/admiralbob77/61638 Ft: Snowflake\nhttps://creativecommons.org/licenses/by-nc/4.0/\n\nThis excerpt has been truncated and modified to include only the drum and bass tracks by Brian McFee (2020).\n"
+  },
+  {
+    "id": "nutcracker",
+    "url": "https://librosa.org/data/audio/Kevin_MacLeod_-_P_I_Tchaikovsky_Dance_of_the_Sugar_Plum_Fairy.ogg",
+    "sha256": "b5c1a3e26310e6618d3c124f458654cd235650fcb9db7d711302644566600484",
+    "label": 1,
+    "split": "test",
+    "attribution": "P. I. Tchaikovsky: Dance of the Sugar Plum Fairy by Kevin MacLeod is licensed under a Creative Commons Attribution License. \nFrom the Free Music Archive: https://freemusicarchive.org/music/Kevin_MacLeod/Classical_Sampler/Dance_of_the_Sugar_Plum_Fairy\nCC-BY https://creativecommons.org/licenses/by/3.0/\n"
+  },
+  {
+    "id": "trumpet",
+    "url": "https://librosa.org/data/audio/sorohanro_-_solo-trumpet-06.ogg",
+    "sha256": "8374466fd3951d24509da6e799b132a0db0bdeda69d99c69d989a6888d3d727d",
+    "label": 1,
+    "split": "test",
+    "attribution": "Part of \"Jazz Trumpet Loops Pack in F 90 bpm\" by Mihai Sorohan\nAll parts in this pack are in F, mostly Blues and Dorian scale and all are in stereo acidized .wav format, 16 bit, 44.1 khz sample rate, 90 bpm. \nFrom Freesound.org https://freesound.org/s/77711/\nCC-BY https://creativecommons.org/licenses/by/3.0/\n"
+  },
+  {
+    "id": "brahms",
+    "url": "https://librosa.org/data/audio/Hungarian_Dance_number_5_-_Allegro_in_F_sharp_minor_%28string_orchestra%29.ogg",
+    "sha256": "919b48aa4cc66a0357d2cd5728664c5ab8f15c4b3469460df4b59470d35d3e49",
+    "label": 1,
+    "split": "test",
+    "attribution": "Hungarian Dance number 5 by Johannes Brahms / US Army Strings is in the Public Domain. \nFrom Musopen: https://musopen.org/music/43805-hungarian-dance-no-5-in-f-sharp-minor-woo-1-string-orchestra-arr/\nPublic Domain https://creativecommons.org/publicdomain/mark/1.0/\n"
+  },
+  {
+    "id": "libri2",
+    "url": "https://librosa.org/data/audio/3436-172162-0000.ogg",
+    "sha256": "780e482b52f2c8a500356babf60178ce005449cc171a8537eb3ef2961eb3e855",
+    "label": 0,
+    "split": "test",
+    "attribution": "The Age of Chivalry / Chapter 18: Perceval / Read by Anders Lankford\nFrom the LibriSpeech SLR12 collection: https://www.openslr.org/12/\nCC-BY 4.0 https://creativecommons.org/licenses/by/4.0/\n"
+  },
+  {
+    "id": "libri3",
+    "url": "https://librosa.org/data/audio/198-209-0000.ogg",
+    "sha256": "0473ba9613befa1026db5e254546f105aeffba8366b5468fc5e8d474d844ca1d",
+    "label": 0,
+    "split": "test",
+    "attribution": "Sense and Sensibility / Chapter 18 / Jane Austen / Read by Heather Barnett\nFrom the LibriSpeech SLR12 collection: https://www.openslr.org/12/\nCC-BY 4.0 https://creativecommons.org/licenses/by/4.0/\n"
+  },
+  {
+    "id": "humpback",
+    "url": "https://librosa.org/data/audio/glacier-bay-humpback.ogg",
+    "sha256": "64395c617b28b5e31a03032b99b4617bc96b926f3bc5c141862cd13fb79ccd8e",
+    "label": 0,
+    "split": "test",
+    "attribution": "Glacier Bay 60-second clip humpback whale song November 2020\nRecorded by NPS - Chris Gabriele, 2020/11/13\nhttps://www.nps.gov/glba/learn/nature/soundclips.htm\nPublic domain, https://www.nps.gov/aboutus/disclaimer.htm\n"
+  }
+]

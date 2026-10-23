@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     result = subprocess.run([
         str(python), "-I", "-m", "folderconformer", "--worker", str(media), json.dumps(rules), "Landscape-FULL",
         "video/", "photo/", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
-        "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;",
+        "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;", "with-music", "0.504",
     ], env=environment, cwd=work, check=True, stdout=subprocess.PIPE, encoding="utf-8")
     assert (media / "photo/Landscape-FULL/wide.png").is_file()
     assert (media / "Data/records.csv").read_bytes() == b"data records"
@@ -76,23 +76,18 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
                     "landscape", "landscape_images", "data_extensions", "remove_empty_dirs", "extension"):
         checked = subprocess.run([
             str(python), "-I", "-m", "folderconformer", "--check", str(media), rule_id,
-            "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;",
+            "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;", "Landscape-FULL", "with-music", "0.504",
         ], env=environment, cwd=work, check=True, capture_output=True, text=True)
-        assert checked.stdout.strip() == f"Check: {rule_id} OK", checked.stdout
-    process = QProcess()
-    qt_environment = QProcessEnvironment()
-    for key, value in environment.items():
-        qt_environment.insert(key, value)
-    process.setProcessEnvironment(qt_environment)
-    process.setWorkingDirectory(str(work))
-    process.start(str(pythonw), ["-I", "-m", "folderconformer"])
-    assert process.waitForStarted(10000)
-    assert not process.waitForFinished(1800), bytes(process.readAllStandardError()).decode("utf-8")
-    subprocess.run(["taskkill", "/PID", str(process.processId()), "/T", "/F"], check=True, stdout=subprocess.PIPE)
-    process.waitForFinished(10000)
-    assert not bytes(process.readAllStandardError())
+        expected = "BAD" if rule_id == "landscape" else "OK"
+        assert checked.stdout.strip() == f"Check: {rule_id} {expected}", checked.stdout
+    # No network is needed for inference: block HTTP clients through dead proxies.
+    offline = environment | {"HTTP_PROXY": "http://127.0.0.1:1", "HTTPS_PROXY": "http://127.0.0.1:1"}
+    subprocess.run([str(python), "-I", str(root / "tests/music_gui_smoke.py")],
+                   env=offline, cwd=work, check=True)
+    subprocess.run([str(python), "-I", str(root / "tests/test_music.py"), "-v"],
+                   env=offline, cwd=work, check=True)
     subprocess.run([*command, f"/LOG={root / 'build/online-reinstall.log'}"], env=setup_environment, check=True)
     subprocess.run([str(install / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
     assert not runtime.exists()
     assert not (install / "source").exists()
-print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, nine rules and checks, GUI, reinstall, uninstall.")
+print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, all rules and checks, real music GUI, offline model, reinstall, uninstall.")

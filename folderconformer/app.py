@@ -17,9 +17,10 @@ from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
+from folderconformer.music_model import MODEL_VERSION, MUSIC_THRESHOLD
 
 
 class StandardIconProvider(QQuickImageProvider):
@@ -86,6 +87,8 @@ class Controller(QObject):
         self._folder = self.settings.value("folder", "", type=str)
         self._enumerate_conflicts = self.settings.value("enumerateConflicts", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
+        self._music_video_folder = self.settings.value("musicVideoFolder", "with-music", type=str)
+        self._music_threshold = self.settings.value("audio/musicThreshold", MUSIC_THRESHOLD, type=float)
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
@@ -105,6 +108,8 @@ class Controller(QObject):
             self._rules.append({"id": "landscape_images", "enabled": True})
         if not any(rule["id"] == "data_extensions" for rule in self._rules):
             self._rules.append({"id": "data_extensions", "enabled": True})
+        if not any(rule["id"] == "music_videos" for rule in self._rules):
+            self._rules.append({"id": "music_videos", "enabled": True})
         for rule_id in ("flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root"):
             if not any(rule["id"] == rule_id for rule in self._rules):
                 self._rules.append({"id": rule_id, "enabled": rule_id.startswith("non_")})
@@ -146,13 +151,16 @@ class Controller(QObject):
             if landscape_rule in enabled:
                 children.append(("landscape", self._landscape_folder,
                                  [(f"file.{extension}", f"file.{extension}", []) for extension in extensions]))
+            if key == "videos" and "music_videos" in enabled:
+                children.append(("music", self._music_video_folder,
+                                 [(f"file.{extension}", f"file.{extension}", []) for extension in extensions]))
             flatten_rule = {"images": "flatten_images", "videos": "flatten_videos", "data": ""}[key]
             if move_rule in enabled or flatten_rule in enabled:
                 for extension in extensions:
                     children.append((f"file.{extension}", f"file.{extension}", []))
                     if move_rule in enabled and extension in grouped_extensions:
                         del grouped_extensions[extension]
-            if enabled.intersection((move_rule, rename_rule, landscape_rule, flatten_rule)):
+            if enabled.intersection((move_rule, rename_rule, landscape_rule, flatten_rule)) or (key == "videos" and "music_videos" in enabled):
                 roots.append((key, name, children))
         if "extension" in enabled:
             for extension in grouped_extensions:
@@ -186,6 +194,8 @@ class Controller(QObject):
         self.settings.setValue("folder", self._folder)
         self.settings.setValue("enumerateConflicts", self._enumerate_conflicts)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
+        self.settings.setValue("musicVideoFolder", self._music_video_folder)
+        self.settings.setValue("audio/musicThreshold", self._music_threshold)
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
         self.settings.setValue("dataFolder", self._data_folder)
@@ -246,6 +256,28 @@ class Controller(QObject):
     @enumerateConflicts.setter
     def enumerateConflicts(self, value):
         self._enumerate_conflicts = value
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def musicVideoFolder(self):
+        return self._music_video_folder
+
+    @musicVideoFolder.setter
+    def musicVideoFolder(self, value):
+        self._music_video_folder = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(float, notify=configurationChanged)
+    def musicThreshold(self):
+        return self._music_threshold
+
+    @musicThreshold.setter
+    def musicThreshold(self, value):
+        self._music_threshold = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Property(str, notify=configurationChanged)
@@ -345,7 +377,7 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
-                               self._landscape_folder])
+                               self._landscape_folder, self._music_video_folder, str(self._music_threshold)])
 
     @Slot()
     def checkAll(self):
@@ -357,7 +389,8 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
                                 self._image_folder, self._video_extensions, self._image_extensions,
-                                self._data_folder, self._data_extensions, self._landscape_folder])
+                                self._data_folder, self._data_extensions, self._landscape_folder,
+                                self._music_video_folder, str(self._music_threshold)])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -417,11 +450,15 @@ class Controller(QObject):
     @Slot(int, bool)
     def setEnabled(self, index, enabled):
         self._rules[index]["enabled"] = enabled
+        self._check_statuses = {key: value for key, value in self._check_statuses.items() if key != "music_videos"}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Slot(int, int)
     def moveRule(self, index, offset):
         self._rules.insert(index + offset, self._rules.pop(index))
+        self._check_statuses = {key: value for key, value in self._check_statuses.items() if key != "music_videos"}
+        self.checkStatusesChanged.emit()
         self.save()
 
     @Slot()
@@ -435,7 +472,8 @@ class Controller(QObject):
         rules = self._rules if index == -1 else [{"id": self._rules[index]["id"], "enabled": True}]
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
-                     self._data_folder, self._data_extensions, "--controlled"]
+                     self._data_folder, self._data_extensions, self._music_video_folder,
+                     str(self._music_threshold), "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -578,6 +616,7 @@ class MainWindow(QMainWindow):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.folder_fields = {}
         for name, label in (("landscapeFolder", self.tr("Landscape folder name")),
+                            ("musicVideoFolder", self.tr("Music Video folder")),
                             ("videoFolder", self.tr("Video folder")), ("imageFolder", self.tr("Image folder")),
                             ("dataFolder", self.tr("Data"))):
             field = QLineEdit(getattr(controller, name))
@@ -627,6 +666,33 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.folders_dock, self.files_dock, Qt.Orientation.Vertical)
         self.files_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("filesVisible", visible))
         quick_window.filesToggled.connect(self.files_dock.setVisible)
+        self.audio_dock = QDockWidget(self.tr("Audio"), self)
+        self.audio_dock.setObjectName("audioDock")
+        audio_contents = QWidget()
+        audio_form = QFormLayout(audio_contents)
+        audio_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        audio_form.addRow(QLabel(self.tr("Music detection · %1").replace("%1", MODEL_VERSION)))
+        self.music_threshold = QDoubleSpinBox()
+        self.music_threshold.setObjectName("musicThreshold")
+        self.music_threshold.setAccessibleName(self.tr("Music score threshold"))
+        self.music_threshold.setRange(0.001, 1.0)
+        self.music_threshold.setDecimals(3)
+        self.music_threshold.setSingleStep(0.01)
+        self.music_threshold.setValue(controller.musicThreshold)
+        self.music_threshold.setToolTip(self.tr("Lower values detect music more readily. This score is not a probability of correctness."))
+        self.music_threshold.valueChanged.connect(lambda value: setattr(controller, "musicThreshold", value))
+        audio_form.addRow(self.tr("Music score threshold"), self.music_threshold)
+        description = QLabel(self.tr("Detect music anywhere in each video, including under speech. All audio tracks and channels are analyzed locally."))
+        description.setWordWrap(True)
+        audio_form.addRow(description)
+        audio_scroll = QScrollArea()
+        audio_scroll.setWidgetResizable(True)
+        audio_scroll.setWidget(audio_contents)
+        self.audio_dock.setWidget(audio_scroll)
+        self.splitDockWidget(self.files_dock, self.audio_dock, Qt.Orientation.Vertical)
+        self.audio_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("audioVisible", visible))
+        quick_window.audioToggled.connect(self.audio_dock.setVisible)
+        controller.configurationChanged.connect(self.sync_audio)
         controller.configurationChanged.connect(self.sync_folders)
         controller.configurationChanged.connect(self.sync_files)
         controller.runningChanged.connect(self.sync_enabled)
@@ -664,6 +730,10 @@ class MainWindow(QMainWindow):
         self.input_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+        self.audio_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+
+    def sync_audio(self):
+        self.music_threshold.setValue(self.controller.musicThreshold)
 
     def sync_files(self):
         self.enumerate_conflicts.setChecked(self.controller.enumerateConflicts)
@@ -684,6 +754,7 @@ class MainWindow(QMainWindow):
         self.preview_dock.close()
         self.folders_dock.close()
         self.files_dock.close()
+        self.audio_dock.close()
         super().closeEvent(event)
 
 
@@ -704,7 +775,8 @@ def main():
         rule_ids = json.loads(sys.argv[3]) if sys.argv[1] == "--check-all" else [sys.argv[3]]
         for rule_id in rule_ids:
             status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
-                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10])
+                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
+                                sys.argv[11], float(sys.argv[12]))
             print(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
@@ -712,10 +784,11 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[11:] else None
+        control = RunControl() if "--controlled" in sys.argv[13:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[11:])
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[13:],
+                music_folder=sys.argv[11], music_threshold=float(sys.argv[12]))
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)

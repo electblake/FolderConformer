@@ -18,6 +18,8 @@ ApplicationWindow {
     signal foldersToggled(bool visible)
     property bool filesVisible: true
     signal filesToggled(bool visible)
+    property bool audioVisible: true
+    signal audioToggled(bool visible)
     signal resetLayoutRequested()
     width: 820
     height: 720
@@ -96,6 +98,13 @@ ApplicationWindow {
                 checkable: true
                 checked: window.filesVisible
                 onTriggered: window.filesToggled(!window.filesVisible)
+            }
+            MenuItem {
+                objectName: "audioMenu"
+                text: qsTr("&Audio")
+                checkable: true
+                checked: window.audioVisible
+                onTriggered: window.audioToggled(!window.audioVisible)
             }
             MenuSeparator {}
             MenuItem {

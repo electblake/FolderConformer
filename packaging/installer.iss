@@ -34,6 +34,8 @@ Source: "..\folderconformer\*.ico"; DestDir: "{app}\source\folderconformer"; Fla
 Source: "..\folderconformer\qml\*.qml"; DestDir: "{app}\source\folderconformer\qml"; Flags: ignoreversion
 Source: "..\pyproject.toml"; DestDir: "{app}\source"; Flags: ignoreversion
 Source: "..\uv.lock"; DestDir: "{app}\source"; Flags: ignoreversion
+Source: "https://www.kaggle.com/api/v1/models/google/yamnet/tensorFlow2/yamnet/1/download"; DestDir: "{tmp}"; DestName: "yamnet.tar.gz"; ExternalSize: 14242921; Hash: "b80da2a1a56926fb0767205051a200dd7b3beaf3ea1ea126c42a53943996e5e0"; Flags: external download ignoreversion deleteafterinstall
+Source: "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe"; DestDir: "{tmp}"; DestName: "VC_redist.x64.exe"; ExternalSize: 18731856; Hash: "843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c"; Flags: external download ignoreversion deleteafterinstall
 Source: "install_runtime.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
@@ -45,6 +47,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\r
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
 
 [Run]
+Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ runtime..."; Flags: shellexec waituntilterminated; AfterInstall: InstallRuntime
 Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
@@ -56,16 +59,14 @@ Type: filesandordirs; Name: "{localappdata}\FolderConformer\Cache"
 var
   RuntimeExitCode: Integer;
 
-procedure CurStepChanged(CurStep: TSetupStep);
+procedure InstallRuntime;
 begin
-  if CurStep = ssPostInstall then begin
     WizardForm.StatusLabel.Caption := 'Downloading Python and installing FolderConformer dependencies...';
     ExecAndLogOutput(ExpandConstant('{app}\tools\uv.exe'),
       'run --isolated --no-project --python 3.12.10 --managed-python --with platformdirs==4.13.5 "' +
       ExpandConstant('{app}\install_runtime.py') + '" "' + ExpandConstant('{app}\source') +
-      '" "' + ExpandConstant('{app}\tools\uv.exe') + '"',
+      '" "' + ExpandConstant('{app}\tools\uv.exe') + '" "' + ExpandConstant('{tmp}\yamnet.tar.gz') + '"',
       ExpandConstant('{app}'), SW_SHOWNORMAL, ewWaitUntilTerminated, RuntimeExitCode, nil);
-  end;
 end;
 
 function GetCustomSetupExitCode: Integer;

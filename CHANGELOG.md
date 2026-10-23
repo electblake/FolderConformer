@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added opt-in V1 and I1 rules to recursively flatten the configured video and image folders, with Check, Run Once, saved ordering, and existing name-conflict handling.
 - Added V2 and I2 rules to move direct non-video and non-image files into the input root for subsequent rules, using the configured extension lists.
 
+- Added M5 to detect music in videos with the real pretrained YAMNet model, with Check, Run Once, ordered execution, conflict handling, and cancellable bounded audio analysis.
+- Added the Music Video folder setting (default `with-music`) and a persistent Audio dock below Files with the saved music score threshold.
+- Added setup-time, SHA-256-verified YAMNet and Microsoft runtime downloads, locked TensorFlow installation, and local model inference verification.
+- Added licensed real-audio regression fixtures, whole-model/streaming parity checks, real video move tests, and an installed-GUI music smoke test.
 - Documented the complete pretrained video music detection, Audio dock, rule, and online setup implementation plan.
 - Loaded local development credentials from the git-ignored `.env` through mise.
 - Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
@@ -38,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Included flatten-only media destinations in the target preview.
 - Kept non-media rules from renaming files already at the input root when a media folder is configured as `.`.
 
+- Updated installer smoke-test worker arguments and landscape expectations to match the current application interface.
 - Preserved input controls' busy-state locking and closed floating input and preview docks with the main window.
 - Kept preview text, buttons, and tree readable across light and dark themes and larger fonts, and removed a duplicate View-menu keyboard mnemonic.
 - Kept the rules list in place when expanding the preview and adjusted the window minimum height to keep controls accessible with larger text.

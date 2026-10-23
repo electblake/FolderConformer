@@ -1,4 +1,12 @@
 FolderConformer setup downloads Python and locked Python dependencies through uv.
+
+Music classification uses Google's YAMNet version 1, Apache License 2.0.
+Model: https://www.kaggle.com/models/google/yamnet/tensorFlow2/yamnet/1
+Source: https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
+TensorFlow 2.21.0 is distributed under Apache License 2.0.
+Setup downloads the model separately; it is not embedded in this installer.
+Setup also downloads Microsoft's signed Visual C++ x64 Redistributable
+14.51.36247.0 and runs its official installer, subject to Microsoft's terms.
 uv 0.11.11: https://github.com/astral-sh/uv/tree/0.11.11
 uv licenses: https://github.com/astral-sh/uv/blob/0.11.11/LICENSE-MIT
 and https://github.com/astral-sh/uv/blob/0.11.11/LICENSE-APACHE

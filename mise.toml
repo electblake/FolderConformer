@@ -5,6 +5,7 @@ uv = "latest"
 
 [env]
 '_'.file = { path = ".env" }
+UV_LINK_MODE="copy"
 
 [tasks.run]
 description = "Start FolderConformer"
@@ -17,8 +18,16 @@ run = "uv run python packaging/prepare_tools.py"
 
 [tasks.test]
 description = "Check media rules and settings"
-depends = ["prepare-tools"]
+depends = ["prepare-tools", "prepare-model", "prepare-music-tests"]
 run = "uv run python -m unittest discover -s tests -v"
+
+[tasks.prepare-model]
+description = "Download the pinned YAMNet model for local development"
+run = "uv run python packaging/prepare_model.py"
+
+[tasks.prepare-music-tests]
+description = "Download licensed real-audio regression recordings"
+run = "uv run python packaging/prepare_music_tests.py"
 
 [tasks.build]
 description = "Build the Windows application and installer"

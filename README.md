@@ -4,9 +4,9 @@
 
 A basic Windows Qt Quick application for moving files into folders using an ordered rule pipeline. Controls use the Blender theme by default.
 
-Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Execute rules**. Rules define their own scan depth: N4 processes loose files at the input root, H2 and B7 process direct files in their configured video and photo folders, F8 and N2 create or consolidate their media folders, J1, S6, and R3 inspect their specific extension folders, and K9 removes empty directories recursively.
+Select a folder, enable the desired rules, use **Move up / Move down** to set their order, and choose **Execute rules**. Rules define their own scan depth: N4 processes loose files at the input root, H2, B7, and M5 process direct files in their configured video and photo folders, F8 and N2 create or consolidate their media folders, J1, S6, and R3 inspect their specific extension folders, and K9 removes empty directories recursively.
 
-Each rule has a permanent, randomly assigned letter–number identifier before its file/folder label: **H2** move landscape and square videos, **N4** group loose files by extension, **F8** single images folder, **N2** single videos folder, **J1** move image file extensions, **S6** move video file extensions, and **K9** remove empty directories, and **B7** move landscape and square images, and **R3** move data files into Data folder. Identifiers stay with their rules across reordering and restarts and do not indicate execution order.
+Each rule has a permanent, randomly assigned letter–number identifier before its file/folder label: **H2** move landscape and square videos, **N4** group loose files by extension, **F8** single images folder, **N2** single videos folder, **J1** move image file extensions, **S6** move video file extensions, and **K9** remove empty directories, and **B7** move landscape and square images, and **R3** move data files into Data folder, and **M5** move videos containing music. Identifiers stay with their rules across reordering and restarts and do not indicate execution order.
 
 Choose **Help > Install for File Explorer**, then **Install**, to add **Open in FolderConformer** to right-click menus for folders, folder backgrounds, and drives for your Windows account. Explorer opens the selected directory in the folder field without starting processing. Reinstalling updates the same menu entries.
 
@@ -34,6 +34,24 @@ The input folder, destination folders, extension lists, all rule toggles and rul
 **File > Settings > Appearance** provides one theme dropdown with **System default** and the [qt-themes](https://github.com/beatreichenbach/qt-themes) palettes. Blender is selected by default for new configurations. The selection is saved through QSettings. Click **Restart & Apply** beside the dropdown to relaunch with the selected theme. System default keeps Qt’s platform style; a selected color theme uses Qt’s built-in Fusion controls so the palette applies consistently.
 
 ## Development
+
+### Video music detection
+
+**M5 — Move videos containing music** analyzes every audio track and channel of matching videos directly inside the configured video folder using Google's pretrained YAMNet 1. Music-positive files move into its **Music Video folder**, default `video/with-music/`. Photos, input-root files, and nested folders are outside this rule. Files without audio remain in place. Decoder/model failures stop the worker and appear in the activity log.
+
+The **Audio** dock starts below Files on the right. It contains the music score threshold (default `0.504`); lower values match more readily. The score is not a probability of correctness. Folder names belong in Folders, while extensions and conflict handling stay in Files. Audio supports View-menu visibility, dragging/floating, saved layouts, and Reset Layout.
+
+Check runs the actual classifier without moving anything. BAD means a music-positive file remains eligible to move, including a name conflict; OK means no work remains. Run Once and Execute rules perform real moves using the existing conflict setting. Pause/Stop is acknowledged between bounded audio batches; stopping leaves the current video unmoved. Cancel terminates the worker.
+
+Run video collection before music detection. Landscape and Music both scan direct children: whichever runs first takes a video matching both. To prioritize music, order video collection, Music, then Landscape. Neither rule scans inside the other's destination.
+
+YAMNet supplies its own features and trained weights. FFmpeg decodes video audio to 16 kHz float PCM; each channel is classified separately so opposing channels cannot cancel. Music, Singing, and Humming scores contribute to the presence decision, including music under speech. The complete audio is scanned in bounded blocks with original frame alignment. Evidence times are relative to the decoded audio track.
+
+This is a pretrained classifier, with imperfect recognition. The small real-recording evaluation caught a whale-song false positive; it does **not** establish 95% recall or a 1% false-positive rate. See [measured results and limitations](docs/music-detection-results.md). No training or externally supplied model is required to use the feature.
+
+Setup downloads the pinned YAMNet v1 archive from Kaggle, verifies its SHA-256, and installs it below the private venv's `models/yamnet/1` directory. No Kaggle account/API key is required for this public archive. TensorFlow and its dependencies are installed through the lockfile. Microsoft's signed Visual C++ runtime is downloaded and installed by Setup and may request Windows approval. No model or dependency binaries are embedded in the application installer. Classification runs offline and never downloads a missing model.
+
+For development, run `mise run prepare-model` once before using Music. `mise run test` also prepares the model and licensed regression recordings. Evaluate the real model on encoded videos with `uv run python packaging/evaluate_music.py validation` and `uv run python packaging/evaluate_music.py test`. Test fixtures and generated videos stay under `build/music/`; source URLs, hashes, and attribution are recorded in `tests/music-fixtures.json`.
 
 The existing mise Python 3.12 environment is retained. Dependencies, including the FFmpeg provider, are managed through uv and locked in `uv.lock`.
 

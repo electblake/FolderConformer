@@ -284,6 +284,7 @@ class SettingsUiTests(unittest.TestCase):
                     self.assertTrue(controller.process.waitForFinished(10000))
                     self.assertEqual(controller.process.exitCode(), 0)
                     self.assertEqual(status.property("text"), expected)
+        controller.setEnabled(next(i for i, rule in enumerate(controller.rules) if rule["id"] == "music_videos"), False)
         controller.checkAll()
         self.assertTrue(controller.process.waitForFinished(10000))
         self.assertEqual(controller.process.exitCode(), 0)
@@ -448,6 +449,7 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(restored.rules, controller.rules + [{"id": "remove_empty_dirs", "enabled": False},
                                                                   {"id": "landscape_images", "enabled": True},
                                                                   {"id": "data_extensions", "enabled": True},
+                                                                  {"id": "music_videos", "enabled": True},
                                                                   {"id": "flatten_videos", "enabled": False},
                                                                   {"id": "flatten_images", "enabled": False},
                                                                   {"id": "non_video_to_root", "enabled": True},
@@ -696,7 +698,7 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(second.landscapeFolder, "Wide media")
         self.assertEqual(second.rules, [{"id": "extension", "enabled": True}, {"id": "landscape", "enabled": False}]
                                  + [{"id": rule_id, "enabled": rule_id not in ("remove_empty_dirs", "flatten_videos", "flatten_images")} for rule_id in
-                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions", "flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root")])
+                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions", "music_videos", "flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root")])
         second.moveRule(5, -1)
         second.setEnabled(4, False)
         self.assertEqual(Controller().rules, second.rules)
