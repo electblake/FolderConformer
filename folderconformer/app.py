@@ -307,7 +307,8 @@ class Controller(QObject):
         self._run_state = ""
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
-                               self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions])
+                               self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
+                               self._landscape_folder])
 
     @Slot()
     def checkAll(self):
@@ -319,7 +320,7 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
                                 self._image_folder, self._video_extensions, self._image_extensions,
-                                self._data_folder, self._data_extensions])
+                                self._data_folder, self._data_extensions, self._landscape_folder])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -600,7 +601,7 @@ def main():
         rule_ids = json.loads(sys.argv[3]) if sys.argv[1] == "--check-all" else [sys.argv[3]]
         for rule_id in rule_ids:
             status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
-                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe")
+                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10])
             print(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":

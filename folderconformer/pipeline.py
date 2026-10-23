@@ -117,7 +117,8 @@ def empty_directories(folder: Path):
 
 
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
-               video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path):
+               video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
+               landscape_folder: str):
     if rule_id == "extension":
         bad = any(path.is_file() for path in Path(folder).iterdir())
     elif rule_id in ("rename_images", "rename_videos"):
@@ -137,12 +138,14 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         bad = any(empty_directories(Path(folder)))
     elif rule_id in ("landscape", "landscape_images"):
         directory = video_folder if rule_id == "landscape" else image_folder
-        extensions = video_extensions if rule_id == "landscape" else image_extensions
-        suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
-        target = Path(folder) / directory
+        target = Path(folder) / directory / landscape_folder
         with os.scandir(folder):
-            bad = not target.exists() or any(path.is_file() and path.suffix.lstrip(".").lower() in suffixes
-                                             and is_landscape(path, ffprobe) for path in target.iterdir())
+            if not target.exists():
+                return "BAD"
+        with os.scandir(target) as entries:
+            for entry in entries:
+                return "OK" if is_landscape(Path(entry.path), ffprobe) else "BAD"
+        return "BAD"
     return "BAD" if bad else "OK"
 
 

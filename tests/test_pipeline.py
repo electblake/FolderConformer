@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -45,8 +46,29 @@ class PipelineTests(unittest.TestCase):
     def test_landscape_checks_report_missing_default_folders_as_bad(self):
         for rule_id in ("landscape", "landscape_images"):
             with self.subTest(rule=rule_id):
-                self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE), "BAD")
+                self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
         self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_landscape_checks_only_probe_first_destination_item(self):
+        for rule_id, directory in (("landscape", "video"), ("landscape_images", "photo")):
+            with self.subTest(rule=rule_id):
+                target = self.folder / directory / "Wide"
+                with patch("folderconformer.pipeline.is_landscape") as probe:
+                    self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+                    target.mkdir(parents=True)
+                    self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+                    probe.assert_not_called()
+                for name in ("first.mp4", "second.mp4", "third.mp4"):
+                    (target / name).write_text("unprobed")
+                (target.parent / "outside.mp4").write_text("unprobed")
+                with os.scandir(target) as entries:
+                    first = Path(next(entries).path)
+                for landscape, expected in ((True, "OK"), (False, "BAD")):
+                    with patch("folderconformer.pipeline.is_landscape", return_value=landscape) as probe, \
+                            patch("folderconformer.pipeline.os.scandir", wraps=os.scandir) as scan:
+                        self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), expected)
+                        probe.assert_called_once_with(first, FFPROBE)
+                        self.assertEqual([call.args[0] for call in scan.call_args_list], [self.folder, target])
 
     def test_data_rule_moves_matching_files_and_preserves_scan_boundaries(self):
         for directory in ("CSV/deep", "Data/db", "nested"):
@@ -55,14 +77,14 @@ class PipelineTests(unittest.TestCase):
         untouched = ("image.png", "CSV/other.png", "CSV/deep/nested.csv", "nested/note.txt", "Data/existing.txt")
         for name in (*moved, *untouched):
             (self.folder / name).write_text(name)
-        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE), "BAD")
+        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
         self.run_rules([{"id": "data_extensions", "enabled": True}])
         for name in moved:
             self.assertEqual((self.folder / "Data" / Path(name).name).read_text(), name)
             self.assertFalse((self.folder / name).exists())
         for name in untouched:
             self.assertEqual((self.folder / name).read_text(), name)
-        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE), "OK")
+        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
         self.run_rules([{"id": "data_extensions", "enabled": True}])
         self.assertEqual(len(list((self.folder / "Data").glob("*.*"))), 5)
 
@@ -77,11 +99,11 @@ class PipelineTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *FOLDER_FILES)
                 self.assertEqual((root / "Data/note.txt").read_text(), "existing")
-                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE), "BAD")
+                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *FOLDER_FILES, enumerate_conflicts=True)
                 self.assertEqual((root / "Data/note_1.txt").read_text(), "incoming")
-                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE), "OK")
+                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
 
     def test_data_rule_custom_extensions_and_disabled_rule(self):
         (self.folder / "records.SQLITE").write_text("database")
@@ -106,7 +128,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((self.folder / "notes.txt").read_text(), "existing")
         self.assertEqual((self.folder / "table.csv").read_text(), "table")
         self.assertFalse((self.folder / "notes_1.txt").exists())
-        self.assertEqual(check_rule(self.folder, "data_extensions", *config, FFPROBE), "OK")
+        self.assertEqual(check_rule(self.folder, "data_extensions", *config, FFPROBE, "Wide"), "OK")
 
     def test_summary_counts_folder_changes_when_no_files_are_scanned(self):
         for name in ("Images", "Videos", "jpg", "mp4"):
@@ -302,12 +324,12 @@ class PipelineTests(unittest.TestCase):
                 root.mkdir()
                 rules = [{"id": rule_id, "enabled": True}]
                 config = ("Clips/", "Pictures/", "mp4", "png", "Data/", "csv;db;txt;")
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "BAD")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "BAD")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *config)
                 target = root / destination
                 self.assertTrue(target.is_dir())
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "OK")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "OK")
                 (target / "shared").mkdir()
                 (target / "shared/same.txt").write_text("existing")
                 for alias in aliases:
@@ -317,14 +339,14 @@ class PipelineTests(unittest.TestCase):
                 (root / "unrelated" / aliases[0]).mkdir(parents=True)
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *config)
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "BAD")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "BAD")
                 self.assertEqual((target / "shared/same.txt").read_text(), "existing")
                 for alias in aliases:
                     self.assertEqual((target / f"{alias}.txt").read_text(), alias)
                     self.assertEqual((root / alias / "shared/same.txt").read_text(), alias)
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *config, enumerate_conflicts=True)
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "OK")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "OK")
                 self.assertEqual({path.read_text() for path in (target / "shared").iterdir()},
                                  {"existing", *aliases})
                 for alias in aliases:
@@ -348,7 +370,7 @@ class PipelineTests(unittest.TestCase):
                 for alias in aliases:
                     self.assertFalse((root / alias).exists())
                     self.assertEqual((root / destination / "nested" / f"{alias}.txt").read_text(), alias)
-                self.assertEqual(check_rule(root, rule_id, "clips", "photo", "mp4", "png", "Data/", "csv;db;txt;", FFPROBE), "OK")
+                self.assertEqual(check_rule(root, rule_id, "clips", "photo", "mp4", "png", "Data/", "csv;db;txt;", FFPROBE, "Wide"), "OK")
 
     def test_case_only_destination_rename_with_another_alias_to_merge(self):
         for rule_id, aliases, destination in (("rename_images", ("image", "images"), "IMAGES"),
@@ -359,12 +381,12 @@ class PipelineTests(unittest.TestCase):
                     (root / alias).mkdir(parents=True)
                     (root / alias / f"{alias}.txt").write_text(alias)
                 config = ("VIDEOS", "IMAGES", "mp4", "png", "Data/", "csv;db;txt;")
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "BAD")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "BAD")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE, *config)
                 self.assertEqual([path.name for path in root.iterdir()], [destination])
                 self.assertEqual({path.read_text() for path in (root / destination).iterdir()}, set(aliases))
-                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "OK")
+                self.assertEqual(check_rule(root, rule_id, *config, FFPROBE, "Wide"), "OK")
 
     def test_merge_file_directory_conflicts_skip_or_enumerate_without_loss(self):
         (self.folder / "images/folder.txt").mkdir(parents=True)
@@ -375,7 +397,7 @@ class PipelineTests(unittest.TestCase):
         (self.folder / "photo/folder.txt").write_text("destination")
         rules = [{"id": "rename_images", "enabled": True}]
         self.run_rules(rules)
-        self.assertEqual(check_rule(self.folder, "rename_images", *FOLDER_FILES, FFPROBE), "BAD")
+        self.assertEqual(check_rule(self.folder, "rename_images", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
         self.assertEqual((self.folder / "images/folder.txt/child.txt").read_text(), "nested source")
         self.assertEqual((self.folder / "images/file.txt").read_text(), "source")
         self.run_rules(rules, enumerate_conflicts=True)
@@ -383,7 +405,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((self.folder / "photo/file_1.txt").read_text(), "source")
         self.assertEqual((self.folder / "photo/file.txt/child.txt").read_text(), "nested destination")
         self.assertEqual((self.folder / "photo/folder.txt").read_text(), "destination")
-        self.assertEqual(check_rule(self.folder, "rename_images", *FOLDER_FILES, FFPROBE), "OK")
+        self.assertEqual(check_rule(self.folder, "rename_images", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
 
     def test_merge_stops_without_removing_unmoved_source_contents(self):
         (self.folder / "images").mkdir()

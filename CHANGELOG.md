@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Moved Copy Output below the activity log.
+- Changed landscape checks to probe only the first item in the configured landscape destination; missing or empty destinations report BAD.
 
 ## [0.8.0] - 2026-10-22
 

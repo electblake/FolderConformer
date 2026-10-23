@@ -161,63 +161,45 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(controller.checkStatuses, {})
         window.close()
 
-    def test_landscape_check_buttons_report_skipped_conflicts_until_resolved(self):
+    def test_landscape_check_buttons_sample_configured_destination(self):
         folder = Path(self.temporary.name) / "media"
+        folder.mkdir()
         controller = Controller(str(folder))
         controller.videoFolder = "Clips/"
         controller.imageFolder = "Pictures/"
-        controller.videoExtensions = " .MP4; "
-        controller.imageExtensions = " .PNG; "
         controller.landscapeFolder = "Wide"
         tools = Path(get_platform_dir())
         engine = QQmlApplicationEngine()
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
-        for rule_id, directory, suffix, other_suffix in (("landscape", "Clips", "mp4", "png"),
-                                                       ("landscape_images", "Pictures", "png", "mp4")):
+        for rule_id, directory, suffix in (("landscape", "Clips", "mp4"),
+                                           ("landscape_images", "Pictures", "png")):
             with self.subTest(rule=rule_id):
-                media = folder / directory
-                (media / "Wide").mkdir(parents=True)
-                (media / "nested").mkdir()
+                target = folder / directory / "Wide"
                 button = self.rule_control(window, rule_id + "Check")
                 status = self.rule_control(window, rule_id + "CheckStatus")
-                self.assertTrue(button.property("enabled"))
-                self.assertEqual(status.property("text"), "-")
                 QMetaObject.invokeMethod(button, "clicked")
                 self.assertTrue(controller.process.waitForFinished(10000))
-                self.assertEqual(status.property("text"), "OK")
-                for name, size in (("wide", "80x40"), ("square", "40x40"), ("portrait", "40x80")):
-                    subprocess.run([str(tools / "ffmpeg.exe"), "-v", "error", "-f", "lavfi", "-i",
-                                    f"color=c=red:s={size}:d=0.1", "-frames:v", "1", str(media / f"{name}.{suffix}")],
+                self.assertEqual(status.property("text"), "BAD")
+                target.mkdir(parents=True)
+                QMetaObject.invokeMethod(button, "clicked")
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertEqual(status.property("text"), "BAD")
+                (target.parent / f"unprobed.{suffix}").write_text("invalid media outside destination")
+                for size, expected in (("80x40", "OK"), ("40x40", "OK"), ("40x80", "BAD")):
+                    subprocess.run([str(tools / "ffmpeg.exe"), "-y", "-v", "error", "-f", "lavfi", "-i",
+                                    f"color=c=red:s={size}:d=0.1", "-frames:v", "1", str(target / f"sample.{suffix}")],
                                    check=True, capture_output=True)
-                (media / "nested" / f"deep.{suffix}").write_bytes((media / f"wide.{suffix}").read_bytes())
-                (folder / f"root.{suffix}").write_bytes((media / f"wide.{suffix}").read_bytes())
-                (media / f"unrelated.{other_suffix}").write_text("not matching media")
-                target = media / "Wide" / f"square.{suffix}"
-                target.write_bytes(b"existing")
-                QMetaObject.invokeMethod(button, "clicked")
-                self.assertTrue(controller.process.waitForFinished(10000))
-                self.assertEqual(status.property("text"), "BAD")
-                rules = [{"id": rule_id, "enabled": True}]
-                with contextlib.redirect_stdout(io.StringIO()):
-                    conform(folder, rules, controller.landscapeFolder, tools / "ffprobe.exe",
-                            controller.videoFolder, controller.imageFolder, controller.videoExtensions,
-                            controller.imageExtensions, controller.dataFolder, controller.dataExtensions)
-                self.assertTrue((media / f"square.{suffix}").is_file())
-                QMetaObject.invokeMethod(button, "clicked")
-                self.assertTrue(controller.process.waitForFinished(10000))
-                self.assertEqual(status.property("text"), "BAD")
-                with contextlib.redirect_stdout(io.StringIO()):
-                    conform(folder, rules, controller.landscapeFolder, tools / "ffprobe.exe",
-                            controller.videoFolder, controller.imageFolder, controller.videoExtensions,
-                            controller.imageExtensions, controller.dataFolder, controller.dataExtensions, enumerate_conflicts=True)
-                QMetaObject.invokeMethod(button, "clicked")
-                self.assertTrue(controller.process.waitForFinished(10000))
-                self.assertEqual(status.property("text"), "OK")
-                self.assertEqual(target.read_bytes(), b"existing")
-                self.assertTrue((media / "Wide" / f"square_1.{suffix}").is_file())
-                self.assertTrue((media / f"portrait.{suffix}").is_file())
+                    QMetaObject.invokeMethod(button, "clicked")
+                    self.assertTrue(controller.process.waitForFinished(10000))
+                    self.assertEqual(controller.process.exitCode(), 0)
+                    self.assertEqual(status.property("text"), expected)
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertEqual(controller.checkStatuses["landscape"], "BAD")
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
         window.close()
 
     def test_extension_check_reports_loose_files_and_skipped_conflicts(self):
@@ -309,12 +291,12 @@ class SettingsUiTests(unittest.TestCase):
 
     def test_failed_check_clears_previous_result_and_surfaces_worker_failure(self):
         folder = Path(self.temporary.name) / "media"
-        (folder / "photo").mkdir(parents=True)
+        (folder / "photo" / "Landscape-FULL").mkdir(parents=True)
         controller = Controller(str(folder))
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
-        self.assertEqual(controller.checkStatuses["landscape_images"], "OK")
-        (folder / "photo" / "broken.png").write_text("invalid image")
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
+        (folder / "photo" / "Landscape-FULL" / "broken.png").write_text("invalid image")
         output = []
         controller.output.connect(output.append)
         controller.checkRule("landscape_images")
@@ -322,10 +304,10 @@ class SettingsUiTests(unittest.TestCase):
         self.assertNotEqual(controller.process.exitCode(), 0)
         self.assertIn("Traceback (most recent call last):", "".join(output))
         self.assertEqual(controller.checkStatuses["landscape_images"], "ERR")
-        (folder / "photo" / "broken.png").unlink()
+        (folder / "photo" / "Landscape-FULL" / "broken.png").unlink()
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
-        self.assertEqual(controller.checkStatuses["landscape_images"], "OK")
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
 
     def test_check_worker_start_failure_reports_err(self):
         controller = Controller(self.temporary.name)
@@ -366,7 +348,7 @@ class SettingsUiTests(unittest.TestCase):
                 (folder / directory).mkdir()
                 controller.checkRule(rule_id)
                 self.assertTrue(controller.process.waitForFinished(10000))
-                self.assertEqual(controller.checkStatuses[rule_id], "OK")
+                self.assertEqual(controller.checkStatuses[rule_id], "BAD")
 
     def test_new_rule_is_added_to_saved_rules_once(self):
         controller = Controller()
