@@ -118,15 +118,49 @@ class MusicTests(unittest.TestCase):
                         "-map", "0:v", "-map", "[a]", "-t", "10", "-c:v", "libx264", "-c:a", "aac", str(path)], check=True)
         self.assertTrue(self.classify(path).contains_music)
 
-    def test_threshold_equality_and_full_scan(self):
+    def test_threshold_equality_stops_at_first_qualifying_batch(self):
         path = self.video("video/music.mp4")
         result = self.classify(path)
         detector = MusicDetector(result.max_window_score)
         with contextlib.redirect_stdout(io.StringIO()):
             equal = detector.classify_video(path, FFPROBE)
         self.assertTrue(equal.contains_music)
-        self.assertTrue(any(window.start_s > 8 for window in result.evidence_windows))
-        self.assertLessEqual(max(window.end_s for window in result.evidence_windows), 10.1)
+        self.assertLessEqual(max(window.end_s for window in result.evidence_windows), BLOCK_SAMPLES / 16000)
+
+    def test_positive_stops_decoder_and_skips_remaining_audio_tracks(self):
+        path = self.root / "video/early.mkv"
+        subprocess.run([str(FFMPEG), "-v", "error", "-f", "lavfi", "-i", "color=s=80x40:r=5",
+                        "-stream_loop", "-1", "-i", str(FIXTURES / "vibeace.ogg"),
+                        "-map", "0:v", "-map", "1:a", "-map", "1:a", "-t", "120",
+                        "-c:v", "libx264", "-c:a", "aac", str(path)], check=True)
+        processes = []
+        popen = subprocess.Popen
+
+        def record_process(*args, **kwargs):
+            process = popen(*args, **kwargs)
+            if args[0][0] == str(FFMPEG):
+                processes.append(process)
+            return process
+
+        output = io.StringIO()
+        with patch("folderconformer.music.subprocess.Popen", side_effect=record_process), contextlib.redirect_stdout(output):
+            result = self.detector.classify_video(path, FFPROBE)
+        self.assertTrue(result.contains_music)
+        self.assertEqual(len(processes), 1)
+        self.assertIsNotNone(processes[0].poll())
+        self.assertTrue(processes[0].stdout.closed)
+        self.assertEqual(output.getvalue().count("Audio:"), 1)
+        self.assertIn("4.3s analyzed", output.getvalue())
+        self.assertEqual({window.stream for window in result.evidence_windows}, {1})
+
+    def test_negative_scans_through_end(self):
+        path = self.video("video/speech.mp4", "libri1")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = self.detector.classify_video(path, FFPROBE)
+        self.assertFalse(result.contains_music)
+        self.assertGreaterEqual(output.getvalue().count("Audio:"), 3)
+        self.assertIn("10.0s analyzed", output.getvalue())
 
     def test_actual_moves_checks_conflicts_and_repeat(self):
         positive = self.video("video/music.mp4")

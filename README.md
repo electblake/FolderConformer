@@ -45,7 +45,7 @@ Check runs the actual classifier without moving anything. BAD means a music-posi
 
 Run video collection before music detection. Landscape and Music both scan direct children: whichever runs first takes a video matching both. To prioritize music, order video collection, Music, then Landscape. Neither rule scans inside the other's destination.
 
-YAMNet supplies its own features and trained weights. FFmpeg decodes video audio to 16 kHz float PCM; each channel is classified separately so opposing channels cannot cancel. Music, Singing, and Humming scores contribute to the presence decision, including music under speech. The complete audio is scanned in bounded blocks with original frame alignment. Evidence times are relative to the decoded audio track.
+YAMNet supplies its own features and trained weights. FFmpeg decodes video audio to 16 kHz float PCM; each channel is classified separately so opposing channels cannot cancel. Music, Singing, and Humming scores contribute to the presence decision, including music under speech. Analysis stops after the first batch containing a Music, Singing, or Humming score at or above the threshold. One matching window is sufficient. Batches contain eight windows (4.335 seconds of audio); remaining audio and tracks are skipped after a match. Negative files are scanned through the end. Evidence times are relative to the decoded audio track.
 
 This is a pretrained classifier, with imperfect recognition. The small real-recording evaluation caught a whale-song false positive; it does **not** establish 95% recall or a 1% false-positive rate. See [measured results and limitations](docs/music-detection-results.md). No training or externally supplied model is required to use the feature.
 

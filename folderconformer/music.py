@@ -99,5 +99,7 @@ class MusicDetector:
                             min(end, start + frame * HOP_SAMPLES + FRAME_SAMPLES) / SAMPLE_RATE,
                             self.labels[label], float(scores[channel, frame, label])))
                     print(f"Audio: {path.name}, stream {stream['index']}, {end / SAMPLE_RATE:.1f}s analyzed", flush=True)
+                    if maximum >= self.threshold:
+                        return MusicDetection(True, maximum, self.threshold, tuple(evidence))
                 subprocess.CompletedProcess(command, decoder.wait()).check_returncode()
         return MusicDetection(maximum >= self.threshold, maximum, self.threshold, tuple(evidence))

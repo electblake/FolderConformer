@@ -49,3 +49,9 @@ The first acceptance run caught an archive-layout defect: Inno extracted the gzi
 The combined workspace suite passed **131 tests** in 126.026 seconds after the concurrently developed media-folder rules and their tests were included. Earlier runs exposed an intermittent native Qt exit crash during a floating-dock close/restart case and tests running against changing rule lists; the final full run passed those cases. The native crash was not independently root-caused, so this result is not a claim that such crashes are impossible.
 
 The final rebuilt installer repeated the complete acceptance run successfully after the media-folder changes were committed. Logs: `build/combined-regression.log` and `build/final-installer-smoke.log`. Native dock and embedded QML captures are `build/music/installed-ui.png` and `build/music/installed-rules.png`.
+
+### Early positive exit
+
+Music analysis now returns positive after the first batch with a selected class score at or above the threshold. The decoder is terminated and remaining tracks are skipped. Negative results still require a complete scan. Reported maximum scores and evidence cover only the analyzed prefix; the historical whole-recording scores above describe the original full-scan evaluation.
+
+Validation: all 15 real-model tests passed, including early decoder termination on a two-minute/two-track video, threshold equality, full negative scans, and late music. The source GUI smoke test also passed Check, Run Once, Execute, conflicts, and pause/stop/cancel.
