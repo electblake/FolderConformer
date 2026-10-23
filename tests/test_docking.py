@@ -312,6 +312,10 @@ class DockingTests(unittest.TestCase):
         cases = (
             (set(), []),
             ({"remove_empty_dirs"}, []),
+            ({"flatten_images"}, [("photo/", ["file.jpg"])]),
+            ({"flatten_videos"}, [("video/", ["file.mp4"])]),
+            ({"flatten_videos", "extension"}, [("video/", ["file.mp4"]), ("jpg/", ["file.jpg"]),
+                                               ("mp4/", ["file.mp4"]), ("txt/", ["file.txt"])]),
             ({"rename_images"}, [("photo/", [])]),
             ({"rename_videos"}, [("video/", [])]),
             ({"landscape_images"}, [("photo/", ["Landscape-FULL"])]),

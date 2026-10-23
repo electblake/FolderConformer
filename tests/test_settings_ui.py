@@ -445,9 +445,13 @@ class SettingsUiTests(unittest.TestCase):
         controller._rules = [{"id": "video_extensions", "enabled": False}, {"id": "extension", "enabled": True}]
         controller.save()
         restored = Controller()
-        self.assertEqual(restored.rules, controller.rules + [{"id": "remove_empty_dirs", "enabled": True},
+        self.assertEqual(restored.rules, controller.rules + [{"id": "remove_empty_dirs", "enabled": False},
                                                                   {"id": "landscape_images", "enabled": True},
-                                                                  {"id": "data_extensions", "enabled": True}])
+                                                                  {"id": "data_extensions", "enabled": True},
+                                                                  {"id": "flatten_videos", "enabled": False},
+                                                                  {"id": "flatten_images", "enabled": False},
+                                                                  {"id": "non_video_to_root", "enabled": True},
+                                                                  {"id": "non_image_to_root", "enabled": True}])
         restored.setEnabled(2, False)
         restored.moveRule(2, -1)
         self.assertEqual(Controller().rules, restored.rules)
@@ -463,7 +467,7 @@ class SettingsUiTests(unittest.TestCase):
         window.requestActivate()
         self.assertTrue(QTest.qWaitForWindowActive(window))
         self.assertFalse(self.rule_control(window, "landscapeMoveUp").property("enabled"))
-        self.assertFalse(self.rule_control(window, "data_extensionsMoveDown").property("enabled"))
+        self.assertFalse(self.rule_control(window, "non_image_to_rootMoveDown").property("enabled"))
         for name in ("rename_imagesMoveDown", "rename_imagesEnabled"):
             QTest.qWait(30)
             control = self.rule_control(window, name)
@@ -691,8 +695,8 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(second.folder, first.folder)
         self.assertEqual(second.landscapeFolder, "Wide media")
         self.assertEqual(second.rules, [{"id": "extension", "enabled": True}, {"id": "landscape", "enabled": False}]
-                                 + [{"id": rule_id, "enabled": True} for rule_id in
-                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions")])
+                                 + [{"id": rule_id, "enabled": rule_id not in ("remove_empty_dirs", "flatten_videos", "flatten_images")} for rule_id in
+                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions", "flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root")])
         second.moveRule(5, -1)
         second.setEnabled(4, False)
         self.assertEqual(Controller().rules, second.rules)
@@ -709,6 +713,8 @@ class SettingsUiTests(unittest.TestCase):
         window = engine.rootObjects()[0]
         host = MainWindow(controller, window)
         host.show()
+        host.activateWindow()
+        self.assertTrue(QTest.qWaitForWindowActive(host))
         APP.processEvents()
         for name, value in (("inputFolder", r"C:\media\日本語 é"),):
             field = host.input_folder
@@ -717,7 +723,7 @@ class SettingsUiTests(unittest.TestCase):
             APP.sendEvent(field, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, value))
             APP.processEvents()
             self.assertEqual(field.property("text"), value)
-        for name in [*[rule_id + "Enabled" for rule_id in rule_ids], "extensionMoveUp"]:
+        for name in [*[rule["id"] + "Enabled" for rule in controller.rules if rule["enabled"]], "extensionMoveUp"]:
             QTest.qWait(30)
             control = self.rule_control(window, name)
             position = control.mapToScene(QPointF(control.width() / 2, control.height() / 2)).toPoint()

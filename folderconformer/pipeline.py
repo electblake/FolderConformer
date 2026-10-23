@@ -159,6 +159,24 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                                            or Path(file.name).suffix.lstrip(".").lower() in suffixes) for file in files):
                                         return "BAD"
         return "OK"
+    elif rule_id in ("flatten_videos", "flatten_images"):
+        destination = folder / (video_folder if rule_id == "flatten_videos" else image_folder)
+        pending = [destination]
+        while pending:
+            directory = pending.pop()
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(Path(entry.path))
+                    elif entry.is_file() and directory != destination:
+                        return "BAD"
+        return "OK"
+    elif rule_id in ("non_video_to_root", "non_image_to_root"):
+        directory, extensions = (video_folder, video_extensions) if rule_id == "non_video_to_root" else (image_folder, image_extensions)
+        suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
+        with os.scandir(folder / directory) as entries:
+            bad = any(entry.is_file() and Path(entry.path).parent != folder
+                      and Path(entry.name).suffix.lstrip(".").lower() not in suffixes for entry in entries)
     elif rule_id == "remove_empty_dirs":
         pending = [Path(folder)]
         while pending:
@@ -299,6 +317,48 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                             target = destination / f"{source.stem}_{number}{source.suffix}"
                             number += 1
                         destination.mkdir(parents=True, exist_ok=True)
+                        source.rename(target)
+                        files_moved += 1
+                        print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                    files_processed += 1
+                    print(f"[{index}/{len(files)}] {source.name}", flush=True)
+                if control is not None and control.stopped:
+                    break
+                continue
+            if rule["id"] in ("flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root"):
+                video = rule["id"] in ("flatten_videos", "non_video_to_root")
+                media_folder = folder / (video_folder if video else image_folder)
+                files = []
+                if rule["id"] in ("flatten_videos", "flatten_images"):
+                    destination = media_folder
+                    pending = [media_folder]
+                    while pending:
+                        directory = pending.pop()
+                        with os.scandir(directory) as entries:
+                            for entry in entries:
+                                if entry.is_dir(follow_symlinks=False):
+                                    pending.append(Path(entry.path))
+                                elif entry.is_file() and directory != media_folder:
+                                    files.append(Path(entry.path))
+                else:
+                    destination = folder
+                    extensions = video_extensions if video else image_extensions
+                    suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
+                    with os.scandir(media_folder) as entries:
+                        files = [Path(entry.path) for entry in entries
+                                 if entry.is_file() and Path(entry.path).parent != destination
+                                 and Path(entry.name).suffix.lstrip(".").lower() not in suffixes]
+                for index, source in enumerate(sorted(files), 1):
+                    if control is not None and not control.checkpoint():
+                        break
+                    target = destination / source.name
+                    if os.path.lexists(target) and not enumerate_conflicts:
+                        print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                    else:
+                        number = 1
+                        while os.path.lexists(target):
+                            target = destination / f"{source.stem}_{number}{source.suffix}"
+                            number += 1
                         source.rename(target)
                         files_moved += 1
                         print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)

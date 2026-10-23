@@ -43,6 +43,110 @@ class PipelineTests(unittest.TestCase):
             conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES,
                     enumerate_conflicts=enumerate_conflicts)
 
+    def test_flatten_and_non_media_rules_follow_configured_folders_and_order(self):
+        for media, flatten, cleanup, extension in (
+            ("Clips", "flatten_videos", "non_video_to_root", "MP4"),
+            ("Pictures", "flatten_images", "non_image_to_root", "JPG"),
+        ):
+            with self.subTest(rule=flatten):
+                destination = self.folder / media
+                nested = destination / "album/deep"
+                nested.mkdir(parents=True)
+                (nested / f"media.{extension}").write_text("media")
+                (nested / "notes.txt").write_text("notes")
+                (nested / "LICENSE").write_text("license")
+                settings = ("Clips", "Pictures", " .mp4; ", " .jpg; ", "Data", "txt")
+                def status(rule):
+                    return check_rule(self.folder, rule, *settings, FFPROBE, "Wide")
+                self.assertEqual(status(flatten), "BAD")
+                self.assertEqual(status(cleanup), "OK")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(self.folder, [{"id": flatten, "enabled": False}], "Wide", FFPROBE, *settings)
+                self.assertTrue((nested / "notes.txt").exists())
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(self.folder, [{"id": flatten, "enabled": True}], "Wide", FFPROBE, *settings)
+                self.assertTrue(nested.is_dir())
+                self.assertEqual(status(flatten), "OK")
+                self.assertEqual(status(cleanup), "BAD")
+                (nested / "untouched.txt").write_text("nested")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(self.folder, [{"id": cleanup, "enabled": True},
+                                          {"id": "data_extensions", "enabled": True},
+                                          {"id": "extension", "enabled": True}],
+                            "Wide", FFPROBE, *settings, enumerate_conflicts=True)
+                self.assertEqual(status(cleanup), "OK")
+                self.assertEqual((destination / f"media.{extension}").read_text(), "media")
+                self.assertEqual((nested / "untouched.txt").read_text(), "nested")
+                self.assertEqual((self.folder / "Data/notes.txt").read_text(), "notes")
+                self.assertEqual((self.folder / "no-extension/LICENSE").read_text(), "license")
+
+    def test_media_folder_moves_preserve_conflicts_and_support_enumeration(self):
+        for rule, media, nested in (("flatten_videos", "video", True),
+                                    ("flatten_images", "photo", True),
+                                    ("non_video_to_root", "video", False),
+                                    ("non_image_to_root", "photo", False)):
+            with self.subTest(rule=rule):
+                source = self.folder / media / rule / "same.txt" if nested else self.folder / media / "same.txt"
+                source.parent.mkdir(parents=True, exist_ok=True)
+                target = self.folder / media / "same.txt" if nested else self.folder / "same.txt"
+                target.write_text("original")
+                source.write_text("incoming")
+                self.run_rules([{"id": rule, "enabled": True}])
+                self.assertEqual(source.read_text(), "incoming")
+                self.assertEqual(target.read_text(), "original")
+                self.run_rules([{"id": rule, "enabled": True}], enumerate_conflicts=True)
+                self.assertFalse(source.exists())
+                self.assertEqual(target.read_text(), "original")
+                self.assertEqual(target.with_name("same_1.txt").read_text(), "incoming")
+                target.unlink()
+                target.with_name("same_1.txt").unlink()
+
+    def test_non_media_rules_do_not_rename_files_already_at_input_root(self):
+        source = self.folder / "notes.txt"
+        source.write_text("unchanged")
+        settings = (".", ".", "mp4", "jpg", "Data", "txt")
+        for rule_id in ("non_video_to_root", "non_image_to_root"):
+            with self.subTest(rule=rule_id):
+                self.assertEqual(check_rule(self.folder, rule_id, *settings, FFPROBE, "Wide"), "OK")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(self.folder, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
+                            *settings, enumerate_conflicts=True)
+                self.assertEqual(source.read_text(), "unchanged")
+                self.assertEqual(list(self.folder.iterdir()), [source])
+
+    def test_flatten_duplicate_nested_names_is_repeatable_and_preserves_contents(self):
+        for rule_id, media in (("flatten_videos", "video"), ("flatten_images", "photo")):
+            with self.subTest(rule=rule_id):
+                for name in ("a", "b"):
+                    directory = self.folder / media / name / "deep"
+                    directory.mkdir(parents=True)
+                    (directory / "same.txt").write_text(name)
+                rules = [{"id": rule_id, "enabled": True}]
+                self.run_rules(rules)
+                self.assertEqual((self.folder / media / "same.txt").read_text(), "a")
+                self.assertEqual((self.folder / media / "b/deep/same.txt").read_text(), "b")
+                self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+                self.run_rules(rules, enumerate_conflicts=True)
+                self.run_rules(rules, enumerate_conflicts=True)
+                self.assertEqual((self.folder / media / "same_1.txt").read_text(), "b")
+                self.assertFalse((self.folder / media / "same_2.txt").exists())
+                self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+
+    def test_new_media_rules_stop_before_moving_files(self):
+        for rule_id, media in (("flatten_videos", "video"), ("flatten_images", "photo"),
+                               ("non_video_to_root", "video"), ("non_image_to_root", "photo")):
+            with self.subTest(rule=rule_id):
+                directory = self.folder / media / "nested" if rule_id.startswith("flatten") else self.folder / media
+                directory.mkdir(parents=True, exist_ok=True)
+                source = directory / "notes.txt"
+                source.write_text("unchanged")
+                control = RunControl()
+                with patch("sys.stdin", io.StringIO("continue\nstop\n")), contextlib.redirect_stdout(io.StringIO()):
+                    conform(self.folder, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
+                            *FOLDER_FILES, control=control)
+                self.assertTrue(control.stopped)
+                self.assertEqual(source.read_text(), "unchanged")
+
     def test_landscape_checks_report_missing_default_folders_as_bad(self):
         for rule_id in ("landscape", "landscape_images"):
             with self.subTest(rule=rule_id):

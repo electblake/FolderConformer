@@ -100,11 +100,14 @@ class Controller(QObject):
             )]), type=str
         ))
         if not any(rule["id"] == "remove_empty_dirs" for rule in self._rules):
-            self._rules.append({"id": "remove_empty_dirs", "enabled": True})
+            self._rules.append({"id": "remove_empty_dirs", "enabled": False})
         if not any(rule["id"] == "landscape_images" for rule in self._rules):
             self._rules.append({"id": "landscape_images", "enabled": True})
         if not any(rule["id"] == "data_extensions" for rule in self._rules):
             self._rules.append({"id": "data_extensions", "enabled": True})
+        for rule_id in ("flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root"):
+            if not any(rule["id"] == rule_id for rule in self._rules):
+                self._rules.append({"id": rule_id, "enabled": rule_id.startswith("non_")})
         self._target_tree = QStandardItemModel(self)
         self.configurationChanged.connect(self.update_target_tree)
         self.update_target_tree()
@@ -143,12 +146,13 @@ class Controller(QObject):
             if landscape_rule in enabled:
                 children.append(("landscape", self._landscape_folder,
                                  [(f"file.{extension}", f"file.{extension}", []) for extension in extensions]))
-            if move_rule in enabled:
+            flatten_rule = {"images": "flatten_images", "videos": "flatten_videos", "data": ""}[key]
+            if move_rule in enabled or flatten_rule in enabled:
                 for extension in extensions:
                     children.append((f"file.{extension}", f"file.{extension}", []))
-                    if extension in grouped_extensions:
+                    if move_rule in enabled and extension in grouped_extensions:
                         del grouped_extensions[extension]
-            if enabled.intersection((move_rule, rename_rule, landscape_rule)):
+            if enabled.intersection((move_rule, rename_rule, landscape_rule, flatten_rule)):
                 roots.append((key, name, children))
         if "extension" in enabled:
             for extension in grouped_extensions:

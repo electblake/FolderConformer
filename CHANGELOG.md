@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added opt-in V1 and I1 rules to recursively flatten the configured video and image folders, with Check, Run Once, saved ordering, and existing name-conflict handling.
+- Added V2 and I2 rules to move direct non-video and non-image files into the input root for subsequent rules, using the configured extension lists.
+
 - Documented the complete pretrained video music detection, Audio dock, rule, and online setup implementation plan.
 - Loaded local development credentials from the git-ignored `.env` through mise.
 - Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
@@ -18,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added persistent application logging with worker output, tracebacks, process exit details, and Qt messages.
 
 ### Changed
+
+- Disabled Remove empty dirs by default while preserving existing saved rule choices.
 
 - Moved the input folder path and Browse controls into a dock that defaults to the top, with View-menu visibility, saved layout, and Reset Layout support.
 - Moved the target folder preview, Collapse all, and Open all controls into a dock that defaults to the left, preserving live updates, expansion state, and independent scrolling.
@@ -29,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Kept application log entries across repeated runs.
 
 ### Fixed
+
+- Included flatten-only media destinations in the target preview.
+- Kept non-media rules from renaming files already at the input root when a media folder is configured as `.`.
 
 - Preserved input controls' busy-state locking and closed floating input and preview docks with the main window.
 - Kept preview text, buttons, and tree readable across light and dark themes and larger fonts, and removed a duplicate View-menu keyboard mnemonic.

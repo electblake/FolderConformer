@@ -36,7 +36,11 @@ GroupBox {
                         video_extensions: "S6",
                         remove_empty_dirs: "K9",
                         landscape_images: "B7",
-                        data_extensions: "R3"
+                        data_extensions: "R3",
+                        flatten_videos: "V1",
+                        flatten_images: "I1",
+                        non_video_to_root: "V2",
+                        non_image_to_root: "I2"
                     })[ruleRow.modelData.id]
                 }
                 Label {
@@ -52,6 +56,7 @@ GroupBox {
                     text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "landscape_images"
                         || ruleRow.modelData.id === "extension" || ruleRow.modelData.id === "photo_extensions"
                         || ruleRow.modelData.id === "video_extensions" || ruleRow.modelData.id === "data_extensions"
+                        || ruleRow.modelData.id === "non_video_to_root" || ruleRow.modelData.id === "non_image_to_root"
                         ? qsTr("file") : qsTr("folder")
                 }
                 Label {
@@ -66,7 +71,11 @@ GroupBox {
                         video_extensions: qsTr("video"),
                         remove_empty_dirs: qsTr("other"),
                         landscape_images: qsTr("image"),
-                        data_extensions: qsTr("other")
+                        data_extensions: qsTr("other"),
+                        flatten_videos: qsTr("video"),
+                        flatten_images: qsTr("image"),
+                        non_video_to_root: qsTr("video"),
+                        non_image_to_root: qsTr("image")
                     })[ruleRow.modelData.id]
                 }
                 CheckBox {
@@ -81,7 +90,11 @@ GroupBox {
                         rename_videos: qsTr("Single videos folder"),
                         photo_extensions: qsTr("Move images into images folder"),
                         video_extensions: qsTr("Move videos into videos folder"),
-                        remove_empty_dirs: qsTr("Remove empty dirs")
+                        remove_empty_dirs: qsTr("Remove empty dirs"),
+                        flatten_videos: qsTr("Flatten videos folder"),
+                        flatten_images: qsTr("Flatten images folder"),
+                        non_video_to_root: qsTr("Move non-video files to root"),
+                        non_image_to_root: qsTr("Move non-image files to root")
                     })[ruleRow.modelData.id]
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)

@@ -60,3 +60,11 @@ The build compiles `dist/installer/FolderConformer-0.8.0-windows-amd64-Setup.exe
 `platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
 
 Additional dependencies belong in `pyproject.toml` and `uv.lock`; setup installs them without adding their binaries to the installer. Installation requires internet access. Run `uv run python packaging/smoke.py` to check online installation, the installed app, file processing, reinstall, and uninstall.
+
+### Flattening and non-media files
+
+**V1 — Flatten videos folder** and **I1 — Flatten images folder** recursively move every nested file into the configured media folder's root, including files in landscape/music subfolders. Both default to off. Empty subfolders remain unless **K9 — Remove empty dirs** is enabled; K9 now also defaults to off. Existing saved toggles are preserved.
+
+**V2 — Move non-video files to root** and **I2 — Move non-image files to root** move direct files whose extensions are absent from the corresponding configured extension list into the selected input folder. These rules default to on and do not scan subfolders. Move them after flattening and before collection, data, or extension rules to process misplaced files in the same run. Rules added to saved configurations are appended, preserving the existing order.
+
+All four rules support Check and Run Once and use the existing name-conflict setting.
