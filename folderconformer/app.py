@@ -89,6 +89,8 @@ class Controller(QObject):
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
         self._music_video_folder = self.settings.value("musicVideoFolder", "with-music", type=str)
         self._music_threshold = self.settings.value("audio/musicThreshold", MUSIC_THRESHOLD, type=float)
+        self._singing_threshold = self.settings.value("audio/singingThreshold", MUSIC_THRESHOLD, type=float)
+        self._humming_threshold = self.settings.value("audio/hummingThreshold", MUSIC_THRESHOLD, type=float)
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
@@ -195,6 +197,8 @@ class Controller(QObject):
         self.settings.setValue("enumerateConflicts", self._enumerate_conflicts)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
         self.settings.setValue("musicVideoFolder", self._music_video_folder)
+        self.settings.setValue("audio/singingThreshold", self._singing_threshold)
+        self.settings.setValue("audio/hummingThreshold", self._humming_threshold)
         self.settings.setValue("audio/musicThreshold", self._music_threshold)
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
@@ -276,6 +280,28 @@ class Controller(QObject):
     @musicThreshold.setter
     def musicThreshold(self, value):
         self._music_threshold = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(float, notify=configurationChanged)
+    def singingThreshold(self):
+        return self._singing_threshold
+
+    @singingThreshold.setter
+    def singingThreshold(self, value):
+        self._singing_threshold = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(float, notify=configurationChanged)
+    def hummingThreshold(self):
+        return self._humming_threshold
+
+    @hummingThreshold.setter
+    def hummingThreshold(self, value):
+        self._humming_threshold = value
         self._check_statuses = {}
         self.checkStatusesChanged.emit()
         self.save()
@@ -377,7 +403,8 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
-                               self._landscape_folder, self._music_video_folder, str(self._music_threshold)])
+                               self._landscape_folder, self._music_video_folder, str(self._music_threshold),
+                                str(self._singing_threshold), str(self._humming_threshold)])
 
     @Slot()
     def checkAll(self):
@@ -390,7 +417,8 @@ class Controller(QObject):
         self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
                                 self._image_folder, self._video_extensions, self._image_extensions,
                                 self._data_folder, self._data_extensions, self._landscape_folder,
-                                self._music_video_folder, str(self._music_threshold)])
+                                self._music_video_folder, str(self._music_threshold),
+                                str(self._singing_threshold), str(self._humming_threshold)])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -473,7 +501,8 @@ class Controller(QObject):
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      self._data_folder, self._data_extensions, self._music_video_folder,
-                     str(self._music_threshold), "--controlled"]
+                     str(self._music_threshold), str(self._singing_threshold),
+                     str(self._humming_threshold), "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -680,6 +709,24 @@ class MainWindow(QMainWindow):
         self.music_threshold.setValue(controller.musicThreshold)
         self.music_threshold.valueChanged.connect(lambda value: setattr(controller, "musicThreshold", value))
         audio_form.addRow(self.tr("Minimum music score"), self.music_threshold)
+        self.singing_threshold = QDoubleSpinBox()
+        self.singing_threshold.setObjectName("singingThreshold")
+        self.singing_threshold.setAccessibleName(self.tr("Minimum singing score"))
+        self.singing_threshold.setRange(0.001, 1.0)
+        self.singing_threshold.setDecimals(3)
+        self.singing_threshold.setSingleStep(0.01)
+        self.singing_threshold.setValue(controller.singingThreshold)
+        self.singing_threshold.valueChanged.connect(lambda value: setattr(controller, "singingThreshold", value))
+        audio_form.addRow(self.tr("Minimum singing score"), self.singing_threshold)
+        self.humming_threshold = QDoubleSpinBox()
+        self.humming_threshold.setObjectName("hummingThreshold")
+        self.humming_threshold.setAccessibleName(self.tr("Minimum humming score"))
+        self.humming_threshold.setRange(0.001, 1.0)
+        self.humming_threshold.setDecimals(3)
+        self.humming_threshold.setSingleStep(0.01)
+        self.humming_threshold.setValue(controller.hummingThreshold)
+        self.humming_threshold.valueChanged.connect(lambda value: setattr(controller, "hummingThreshold", value))
+        audio_form.addRow(self.tr("Minimum humming score"), self.humming_threshold)
         audio_scroll = QScrollArea()
         audio_scroll.setWidgetResizable(True)
         audio_scroll.setWidget(audio_contents)
@@ -728,6 +775,8 @@ class MainWindow(QMainWindow):
         self.audio_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
 
     def sync_audio(self):
+        self.singing_threshold.setValue(self.controller.singingThreshold)
+        self.humming_threshold.setValue(self.controller.hummingThreshold)
         self.music_threshold.setValue(self.controller.musicThreshold)
 
     def sync_files(self):
@@ -771,7 +820,7 @@ def main():
         for rule_id in rule_ids:
             status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
                                 sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
-                                sys.argv[11], float(sys.argv[12]))
+                                sys.argv[11], float(sys.argv[12]), float(sys.argv[13]), float(sys.argv[14]))
             print(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
@@ -779,11 +828,12 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[13:] else None
+        control = RunControl() if "--controlled" in sys.argv[15:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[13:],
-                music_folder=sys.argv[11], music_threshold=float(sys.argv[12]))
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[15:],
+                music_folder=sys.argv[11], music_threshold=float(sys.argv[12]),
+                singing_threshold=float(sys.argv[13]), humming_threshold=float(sys.argv[14]))
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)

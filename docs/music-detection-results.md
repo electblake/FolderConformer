@@ -55,3 +55,9 @@ The final rebuilt installer repeated the complete acceptance run successfully af
 Music analysis now returns positive after the first batch with a selected class score at or above the threshold. The decoder is terminated and remaining tracks are skipped. Negative results still require a complete scan. Reported maximum scores and evidence cover only the analyzed prefix; the historical whole-recording scores above describe the original full-scan evaluation.
 
 Validation: all 15 real-model tests passed, including early decoder termination on a two-minute/two-track video, threshold equality, full negative scans, and late music. The source GUI smoke test also passed Check, Run Once, Execute, conflicts, and pause/stop/cancel.
+
+### Independent class thresholds
+
+Music, Singing, and Humming now have separate persisted minimum scores. Any class meeting its own threshold triggers early exit. The original 0.504 operating point remains the default for each; these are not separately calibrated class thresholds. Historical evaluation above used the shared threshold.
+
+Independent-threshold validation: 19 focused tests passed (16 real-model tests, Audio persistence/layout, and two worker-entrypoint tests), plus the real GUI smoke test with different values for all three controls. The concurrent full-suite run encountered an update-dialog failure while another chat was modifying update/menu code; it is not recorded as a passing run.

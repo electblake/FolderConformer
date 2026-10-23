@@ -32,14 +32,14 @@ class MusicEvidence:
 class MusicDetection:
     contains_music: bool
     max_window_score: float
-    threshold: float
+    thresholds: tuple[float, float, float]
     evidence_windows: tuple[MusicEvidence, ...]
     model_version: str = MODEL_VERSION
 
 
 class MusicDetector:
-    def __init__(self, threshold=MUSIC_THRESHOLD):
-        self.threshold = threshold
+    def __init__(self, music_threshold=MUSIC_THRESHOLD, singing_threshold=MUSIC_THRESHOLD, humming_threshold=MUSIC_THRESHOLD):
+        self.thresholds = (music_threshold, singing_threshold, humming_threshold)
         self.model = tf.saved_model.load(str(MODEL_PATH))
         with open(self.model.class_map_path().numpy(), encoding="utf-8") as source:
             classes = list(csv.DictReader(source))
@@ -93,13 +93,13 @@ class MusicDetector:
                     if control is not None and not control.checkpoint():
                         return None
                     maximum = max(maximum, float(scores.max()))
-                    for channel, frame, label in np.argwhere(scores >= self.threshold):
+                    for channel, frame, label in np.argwhere(scores >= self.thresholds):
                         evidence.append(MusicEvidence(
                             stream["index"], int(channel), (start + frame * HOP_SAMPLES) / SAMPLE_RATE,
                             min(end, start + frame * HOP_SAMPLES + FRAME_SAMPLES) / SAMPLE_RATE,
                             self.labels[label], float(scores[channel, frame, label])))
                     print(f"Audio: {path.name}, stream {stream['index']}, {end / SAMPLE_RATE:.1f}s analyzed", flush=True)
-                    if maximum >= self.threshold:
-                        return MusicDetection(True, maximum, self.threshold, tuple(evidence))
+                    if evidence:
+                        return MusicDetection(True, maximum, self.thresholds, tuple(evidence))
                 subprocess.CompletedProcess(command, decoder.wait()).check_returncode()
-        return MusicDetection(maximum >= self.threshold, maximum, self.threshold, tuple(evidence))
+        return MusicDetection(False, maximum, self.thresholds, tuple(evidence))

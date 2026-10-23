@@ -803,7 +803,7 @@ class PipelineTests(unittest.TestCase):
         folder.mkdir()
         (folder / "é.txt").write_text("preserved")
         result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", "0.5"],
+                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", "0.5", "0.5", "0.5"],
                                 check=True, capture_output=True, encoding="utf-8",
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
@@ -817,7 +817,7 @@ class PipelineTests(unittest.TestCase):
                 (folder / "txt/note.txt").write_text("original")
                 (folder / "note.txt").write_text("incoming")
                 arguments = [sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", "0.5"]
+                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", "0.5", "0.5", "0.5"]
                 if enumerate_conflicts:
                     arguments.append("--enumerate-conflicts")
                 result = subprocess.run(arguments, check=True, capture_output=True, encoding="utf-8")

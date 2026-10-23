@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Exposed independent minimum scores for Music, Singing, and Humming in Audio, used by Check and Execute.
+
 - Stopped music analysis at the first qualifying batch, terminating the decoder and skipping remaining audio tracks.
 
 - Removed the Audio dock's model heading, explanatory paragraph, and tooltip; labeled its control Minimum music score.

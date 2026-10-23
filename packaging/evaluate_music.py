@@ -29,7 +29,7 @@ for fixture in json.loads((root / "tests/music-fixtures.json").read_text(encodin
     result = detector.classify_video(video, ffprobe)
     results.append({"id": fixture["id"], "label": fixture["label"],
                     "score": result.max_window_score, "detected": result.contains_music})
-report = {"split": sys.argv[1], "threshold": detector.threshold,
+report = {"split": sys.argv[1], "thresholds": detector.thresholds,
           "elapsed_seconds": time.perf_counter() - started, "files": results}
 output = root / f"build/music/{sys.argv[1]}-results.json"
 output.write_text(json.dumps(report, indent=2), encoding="utf-8")

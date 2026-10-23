@@ -120,7 +120,8 @@ def empty_directories(folder: Path):
 
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
-               landscape_folder: str, music_folder="with-music", music_threshold=MUSIC_THRESHOLD):
+               landscape_folder: str, music_folder="with-music", music_threshold=MUSIC_THRESHOLD,
+               singing_threshold=MUSIC_THRESHOLD, humming_threshold=MUSIC_THRESHOLD):
     if rule_id == "extension":
         with os.scandir(folder) as entries:
             bad = any(entry.is_file() for entry in entries)
@@ -192,7 +193,7 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         return "OK"
     elif rule_id == "music_videos":
         from folderconformer.music import MusicDetector
-        detector = MusicDetector(music_threshold)
+        detector = MusicDetector(music_threshold, singing_threshold, humming_threshold)
         suffixes = {value.strip().lstrip(".").lower() for value in video_extensions.split(";") if value.strip()}
         with os.scandir(folder / video_folder) as entries:
             for entry in entries:
@@ -253,7 +254,8 @@ def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bo
 def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path,
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
-            music_folder="with-music", music_threshold=MUSIC_THRESHOLD):
+            music_folder="with-music", music_threshold=MUSIC_THRESHOLD,
+            singing_threshold=MUSIC_THRESHOLD, humming_threshold=MUSIC_THRESHOLD):
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for rule_id, group in groupby(enabled_rules, key=lambda rule: rule["id"]):
@@ -263,7 +265,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                              "music_videos": folder / video_folder}[rule_id]
             extensions = image_extensions if rule_id == "landscape_images" else video_extensions
             processed, moved = conform_files(source_folder, list(group), landscape_folder, ffprobe, extensions,
-                                            control, enumerate_conflicts, music_folder, music_threshold)
+                                            control, enumerate_conflicts, music_folder, music_threshold,
+                                            singing_threshold, humming_threshold)
             files_processed += processed
             files_moved += moved
             if control is not None and control.stopped:
@@ -422,7 +425,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
 
 
 def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, extensions: str, control=None, enumerate_conflicts: bool = False,
-                  music_folder="with-music", music_threshold=MUSIC_THRESHOLD):
+                  music_folder="with-music", music_threshold=MUSIC_THRESHOLD,
+            singing_threshold=MUSIC_THRESHOLD, humming_threshold=MUSIC_THRESHOLD):
     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
     files = []
     print(f"Scanning {folder}", flush=True)
@@ -438,7 +442,7 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
     processed = 0
     if any(rule["id"] == "music_videos" and rule["enabled"] for rule in rules):
         from folderconformer.music import MusicDetector
-        detector = MusicDetector(music_threshold)
+        detector = MusicDetector(music_threshold, singing_threshold, humming_threshold)
     for index, source in enumerate(files, 1):
         if control is not None and not control.checkpoint():
             break
@@ -454,7 +458,7 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
                     result = detector.classify_video(source, ffprobe, control)
                     if control is not None and control.stopped:
                         return processed, moved
-                    print(f"Music: {source.name}, score={result.max_window_score:.6f}, threshold={result.threshold:.6f}", flush=True)
+                    print(f"Music: {source.name}, score={result.max_window_score:.6f}, thresholds={result.thresholds}", flush=True)
                     if result.contains_music:
                         destination /= music_folder
             elif rule["id"] == "extension":

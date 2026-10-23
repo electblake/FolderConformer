@@ -66,7 +66,7 @@ class MusicTests(unittest.TestCase):
             with self.subTest(name=name):
                 result = self.classify(self.video(f"video/{name}.mp4", audio))
                 self.assertEqual(result.contains_music, expected)
-                self.assertEqual(result.threshold, MUSIC_THRESHOLD)
+                self.assertEqual(result.thresholds, (MUSIC_THRESHOLD,) * 3)
 
     def test_chunked_predictions_match_whole_model_including_short_and_eof(self):
         data = subprocess.run([str(FFMPEG), "-v", "error", "-i", str(FIXTURES / "vibeace.ogg"),
@@ -121,11 +121,33 @@ class MusicTests(unittest.TestCase):
     def test_threshold_equality_stops_at_first_qualifying_batch(self):
         path = self.video("video/music.mp4")
         result = self.classify(path)
-        detector = MusicDetector(result.max_window_score)
+        detector = MusicDetector(*([result.max_window_score] * 3))
         with contextlib.redirect_stdout(io.StringIO()):
             equal = detector.classify_video(path, FFPROBE)
         self.assertTrue(equal.contains_music)
         self.assertLessEqual(max(window.end_s for window in result.evidence_windows), BLOCK_SAMPLES / 16000)
+
+    def test_each_class_uses_its_own_threshold(self):
+        path = self.video("video/thresholds.mp4", filters="atrim=0:1,aformat=channel_layouts=stereo")
+        decoded = subprocess.run([str(FFMPEG), "-v", "error", "-i", str(path),
+                                  "-ar", "16000", "-f", "f32le", "pipe:1"],
+                                 check=True, capture_output=True).stdout
+        waveform = np.frombuffer(decoded, dtype="<f4").reshape(-1, 2)
+        batches = list(self.detector.score_frames([waveform]))
+        maxima = batches[0][2].max(axis=(0, 1))
+        for column, label in enumerate(self.detector.labels):
+            with self.subTest(label=label):
+                thresholds = [1.0, 1.0, 1.0]
+                thresholds[column] = float(maxima[column]) / 2
+                with patch.object(self.detector, "thresholds", tuple(thresholds)):
+                    positive = self.classify(path)
+                self.assertTrue(positive.contains_music)
+                self.assertEqual({window.label for window in positive.evidence_windows}, {label})
+                self.assertEqual(positive.thresholds, tuple(thresholds))
+                thresholds[column] = float(maxima[column]) + 0.0001
+                with patch.object(self.detector, "thresholds", tuple(thresholds)):
+                    negative = self.classify(path)
+                self.assertFalse(negative.contains_music)
 
     def test_positive_stops_decoder_and_skips_remaining_audio_tracks(self):
         path = self.root / "video/early.mkv"

@@ -45,6 +45,10 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-music-GUI-") as directo
         QTest.qWait(100)
         host.folder_fields["musicVideoFolder"].textEdited.emit("Tunes")
         host.music_threshold.setValue(0.504)
+        host.singing_threshold.setValue(0.85)
+        host.humming_threshold.setValue(0.95)
+        restored = app.Controller()
+        assert (restored.musicThreshold, restored.singingThreshold, restored.hummingThreshold) == (0.504, 0.85, 0.95)
         assert app.Controller().musicVideoFolder == "Tunes"
         assert host.audio_dock.isVisible()
         assert host.audio_dock.y() >= host.files_dock.y() + host.files_dock.height()
