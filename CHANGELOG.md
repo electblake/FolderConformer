@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-23
+
+### Fixed
+
+- Isolated installer smoke tests under a unique application identity, runtime, cache, shortcuts, and uninstall registration so tests can run alongside an existing installation.
+- Fixed uninstall cleanup of dependency files with paths longer than 260 characters.
+- Passed the installer application identity explicitly to runtime provisioning, keeping production installation paths unchanged.
+
 ## [0.10.0] - 2026-10-23
 
 ### Added

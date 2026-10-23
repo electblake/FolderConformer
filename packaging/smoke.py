@@ -5,8 +5,9 @@ import subprocess
 import tempfile
 import tomllib
 from pathlib import Path
+from uuid import uuid4
 
-from platformdirs import user_data_path
+from platformdirs import user_cache_path, user_data_path
 from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
 
 
@@ -15,20 +16,26 @@ version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["
 installer = root / "dist/installer" / (
     f"FolderConformer-{version}-{platform.system().lower()}-{platform.machine().lower()}-Setup.exe"
 )
-runtime = user_data_path("FolderConformer", appauthor=False) / "runtime"
-assert not runtime.exists(), runtime
 assert installer.stat().st_size < 5_000_000
 app = QCoreApplication([])
 
 with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     work = Path(temporary)
     install = work / "app"
+    app_name = "FolderConformer-Smoke-" + uuid4().hex
+    runtime = user_data_path(app_name, appauthor=False) / "runtime"
+    subprocess.run([
+        os.environ["ISCC_PATH"], "/Q", f"/DMyAppName={app_name}", f"/DMyAppVersion={version}",
+        f"/DMyAppPlatform={platform.system().lower()}", f"/DMyAppMachine={platform.machine().lower()}",
+        f"/O{work}", str(root / "packaging/installer.iss"),
+    ], cwd=root, check=True)
+    smoke_installer = work / f"{app_name}-{version}-{platform.system().lower()}-{platform.machine().lower()}-Setup.exe"
     setup_environment = os.environ | {
         "UV_PYTHON_INSTALL_DIR": str(work / "managed-python"),
         "UV_CACHE_DIR": str(work / "bootstrap-cache"),
         "UV_HTTP_RETRIES": "0",
     }
-    command = [str(installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOICONS", f"/DIR={install}"]
+    command = [str(smoke_installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOICONS", f"/DIR={install}"]
     subprocess.run([*command, f"/LOG={root / 'build/online-install.log'}"], env=setup_environment, check=True)
     python = runtime / "venv/Scripts/python.exe"
     pythonw = runtime / "venv/Scripts/pythonw.exe"
@@ -87,7 +94,8 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     subprocess.run([str(python), "-I", str(root / "tests/test_music.py"), "-v"],
                    env=offline, cwd=work, check=True)
     subprocess.run([*command, f"/LOG={root / 'build/online-reinstall.log'}"], env=setup_environment, check=True)
-    subprocess.run([str(install / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
+    subprocess.run([str(install / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/LOG={root / 'build/online-uninstall.log'}"], check=True)
     assert not runtime.exists()
+    assert not user_cache_path(app_name, appauthor=False).exists()
     assert not (install / "source").exists()
 print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, all rules and checks, real music GUI, offline model, reinstall, uninstall.")

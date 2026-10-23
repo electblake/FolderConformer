@@ -1,10 +1,12 @@
-#define MyAppName "FolderConformer"
+#ifndef MyAppName
+  #define MyAppName "FolderConformer"
+#endif
 #ifndef MyAppVersion
   #error MyAppVersion must be supplied by packaging/build.py
 #endif
 
 [Setup]
-AppId=FolderConformer.Desktop
+AppId={#MyAppName}.Desktop
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName={localappdata}\Programs\{#MyAppName}
@@ -43,17 +45,17 @@ Source: "licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\{#MyAppName}\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\{#MyAppName}\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ runtime..."; Flags: shellexec waituntilterminated; AfterInstall: InstallRuntime
-Filename: "{localappdata}\FolderConformer\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
+Filename: "{localappdata}\{#MyAppName}\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\source"
-Type: filesandordirs; Name: "{localappdata}\FolderConformer\runtime"
-Type: filesandordirs; Name: "{localappdata}\FolderConformer\Cache"
+Type: filesandordirs; Name: "\\?\{localappdata}\{#MyAppName}\runtime"
+Type: filesandordirs; Name: "\\?\{localappdata}\{#MyAppName}\Cache"
 
 [Code]
 var
@@ -65,7 +67,7 @@ begin
     ExecAndLogOutput(ExpandConstant('{app}\tools\uv.exe'),
       'run --isolated --no-project --python 3.12.10 --managed-python --with platformdirs==4.13.5 "' +
       ExpandConstant('{app}\install_runtime.py') + '" "' + ExpandConstant('{app}\source') +
-      '" "' + ExpandConstant('{app}\tools\uv.exe') + '" "' + ExpandConstant('{tmp}\yamnet.tar.gz') + '"',
+      '" "' + ExpandConstant('{app}\tools\uv.exe') + '" "' + ExpandConstant('{tmp}\yamnet.tar.gz') + '" "{#MyAppName}"',
       ExpandConstant('{app}'), SW_SHOWNORMAL, ewWaitUntilTerminated, RuntimeExitCode, nil);
 end;
 

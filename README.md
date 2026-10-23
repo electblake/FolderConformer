@@ -81,11 +81,11 @@ $env:ISCC_PATH = 'C:\Users\shoji\AppData\Local\Programs\Inno Setup 6\ISCC.exe'
 mise run build
 ```
 
-The build compiles `dist/installer/FolderConformer-0.10.0-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
+The build compiles `dist/installer/FolderConformer-0.10.1-windows-amd64-Setup.exe` from app source, QML, and the lockfile. The filename includes the version, platform, and machine architecture. Setup downloads a pinned, SHA-256-verified uv archive, managed Python 3.12.10, and the locked dependencies. No Python, Qt, FFmpeg, or uv binaries are embedded in Setup.
 
 `platformdirs.user_data_path` places the app venv in `%LOCALAPPDATA%/FolderConformer/runtime/venv`. The uv cache uses `platformdirs.user_cache_path`. Setup syncs the environment without development dependencies and downloads FFmpeg/ffprobe before completing. Start menu and optional desktop shortcuts launch the venv's `pythonw.exe`; workers use its `python.exe`. Uninstall removes the app venv and private cache while retaining settings. uv manages its downloaded Python interpreter in its own per-user storage.
 
-Additional dependencies belong in `pyproject.toml` and `uv.lock`; setup installs them without adding their binaries to the installer. Installation requires internet access. Run `uv run python packaging/smoke.py` to check online installation, the installed app, file processing, reinstall, and uninstall.
+Additional dependencies belong in `pyproject.toml` and `uv.lock`; setup installs them without adding their binaries to the installer. Installation requires internet access. With `ISCC_PATH` set, run `uv run python packaging/smoke.py` to check online installation, the installed app, file processing, reinstall, and uninstall. The test compiles the same installer script with a unique application name so its runtime, cache, shortcuts, and uninstall registration remain separate from the normal installation.
 
 ### Flattening and non-media files
 
