@@ -20,7 +20,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
-from folderconformer.music_model import MODEL_VERSION, MUSIC_THRESHOLD
+from folderconformer.music_model import MUSIC_THRESHOLD
 
 
 class StandardIconProvider(QQuickImageProvider):
@@ -671,20 +671,15 @@ class MainWindow(QMainWindow):
         audio_contents = QWidget()
         audio_form = QFormLayout(audio_contents)
         audio_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        audio_form.addRow(QLabel(self.tr("Music detection · %1").replace("%1", MODEL_VERSION)))
         self.music_threshold = QDoubleSpinBox()
         self.music_threshold.setObjectName("musicThreshold")
-        self.music_threshold.setAccessibleName(self.tr("Music score threshold"))
+        self.music_threshold.setAccessibleName(self.tr("Minimum music score"))
         self.music_threshold.setRange(0.001, 1.0)
         self.music_threshold.setDecimals(3)
         self.music_threshold.setSingleStep(0.01)
         self.music_threshold.setValue(controller.musicThreshold)
-        self.music_threshold.setToolTip(self.tr("Lower values detect music more readily. This score is not a probability of correctness."))
         self.music_threshold.valueChanged.connect(lambda value: setattr(controller, "musicThreshold", value))
-        audio_form.addRow(self.tr("Music score threshold"), self.music_threshold)
-        description = QLabel(self.tr("Detect music anywhere in each video, including under speech. All audio tracks and channels are analyzed locally."))
-        description.setWordWrap(True)
-        audio_form.addRow(description)
+        audio_form.addRow(self.tr("Minimum music score"), self.music_threshold)
         audio_scroll = QScrollArea()
         audio_scroll.setWidgetResizable(True)
         audio_scroll.setWidget(audio_contents)

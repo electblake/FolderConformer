@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Removed the Audio dock's model heading, explanatory paragraph, and tooltip; labeled its control Minimum music score.
 - Disabled Remove empty dirs by default while preserving existing saved rule choices.
 
 - Moved the input folder path and Browse controls into a dock that defaults to the top, with View-menu visibility, saved layout, and Reset Layout support.
