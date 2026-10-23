@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     result = subprocess.run([
         str(python), "-I", "-m", "folderconformer", "--worker", str(media), json.dumps(rules), "Landscape-FULL",
         "video/", "photo/", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
-        "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;", "with-music", '[["/m/04rlf",0.504],["/m/015lz1",0.504],["/m/02fxyj",0.504]]',
+        "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;", "with-music", '[["/m/04rlf",0.504],["/m/015lz1",0.504],["/m/02fxyj",0.504]]', ".forceGallery", json.dumps({"landscape": 1, "landscape_images": 1, "music_videos": 1, "checks": 1}),
     ], env=environment, cwd=work, check=True, stdout=subprocess.PIPE, encoding="utf-8")
     assert (media / "photo/Landscape-FULL/wide.png").is_file()
     assert (media / "Data/records.csv").read_bytes() == b"data records"
@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
                     "landscape", "landscape_images", "data_extensions", "remove_empty_dirs", "extension"):
         checked = subprocess.run([
             str(python), "-I", "-m", "folderconformer", "--check", str(media), rule_id,
-            "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;", "Landscape-FULL", "with-music", '[["/m/04rlf",0.504],["/m/015lz1",0.504],["/m/02fxyj",0.504]]',
+            "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;", "Landscape-FULL", "with-music", '[["/m/04rlf",0.504],["/m/015lz1",0.504],["/m/02fxyj",0.504]]', ".forceGallery", json.dumps({"landscape": 1, "landscape_images": 1, "music_videos": 1, "checks": 1}),
         ], env=environment, cwd=work, check=True, capture_output=True, text=True)
         expected = "BAD" if rule_id == "landscape" else "OK"
         assert checked.stdout.strip() == f"Check: {rule_id} {expected}", checked.stdout

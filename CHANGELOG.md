@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-23
+
+### Added
+
+- Added E1 to create an empty file at the project root, with a saved inline filename defaulting to `.forceGallery`, Check, and Run Once.
+- Added the dockable Performance panel with saved thread counts for video orientation, image orientation, music detection, and rule checks.
+- Added Clear Output and Go to Bottom beside Copy Output.
+
+### Changed
+
+- Bounded activity output to 1,000 lines and 100,000 characters, batched updates every 100 ms, and cleared displayed and queued output before each execution.
+- Ran media analysis and read-only checks concurrently while keeping file moves, conflict numbering, and rule execution ordered.
+- Renamed the preview dock to Conformant Folder and moved explanatory text and parentheticals into tooltips throughout the interface.
+- Displayed remaining time as a right-aligned `ETA HH:MM:SS` beside the processing status.
+
+### Fixed
+
+- Included rule identifiers on progress, scanning, file actions, conflicts, music analysis, and check results.
+- Serialized worker control messages and output, and isolated music models by thread.
+- Preserved existing file contents when E1 targets an existing file and identified E1 as a file rule in the interface.
+- Flushed queued activity output immediately when a worker fails or finishes.
+
 ## [0.9.0] - 2026-10-23
 
 ### Added

@@ -47,6 +47,8 @@ ApplicationWindow {
                     Button {
                         objectName: "viewReleases"
                         text: qsTr("View Releases")
+                        ToolTip.visible: hovered || activeFocus
+                        ToolTip.text: dialog.updater.releaseInfo
                         enabled: !dialog.updater.busy
                         onClicked: Qt.openUrlExternally(dialog.updater.releasesUrl)
                     }
@@ -59,16 +61,11 @@ ApplicationWindow {
                     Button {
                         objectName: "installUpdate"
                         text: qsTr("Quit and Install")
+                        ToolTip.visible: hovered || activeFocus
+                        ToolTip.text: qsTr("Quit and install when ready.")
                         enabled: !dialog.updater.busy && dialog.updater.ready
                         onClicked: dialog.installRequested()
                     }
-                }
-                Label {
-                    objectName: "releaseInfo"
-                    Layout.fillWidth: true
-                    text: dialog.updater.releaseInfo
-                    textFormat: Text.PlainText
-                    wrapMode: Text.WordWrap
                 }
             }
         }

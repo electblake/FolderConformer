@@ -255,7 +255,7 @@ sys.stdin.readline()
             release_network.set()
             self.wait_for(lambda: not updater.workers)
         self.assert_buttons(dialog, True, False, True, True)
-        self.assertEqual(updater.status, "Download complete. Quit and install when ready.")
+        self.assertEqual(updater.status, "Download complete")
         self.assertEqual(progress.property("value"), 1000)
         with patch("folderconformer.app.install_after_exit") as launch:
             QMetaObject.invokeMethod(self.button(dialog, "closeUpdate"), "clicked")

@@ -9,7 +9,10 @@ GroupBox {
     objectName: "rulesPanel"
     required property QtObject controller
     signal runOnceRequested(int index)
-    title: qsTr("Rules — applied from top to bottom")
+    title: qsTr("Rules")
+    hoverEnabled: true
+    ToolTip.visible: hovered
+    ToolTip.text: qsTr("Rules are applied from top to bottom.")
     contentWidth: ruleContents.implicitWidth
     contentHeight: ruleContents.implicitHeight
 
@@ -41,7 +44,8 @@ GroupBox {
                         flatten_videos: "V1",
                         flatten_images: "I1",
                         non_video_to_root: "V2",
-                        non_image_to_root: "I2"
+                        non_image_to_root: "I2",
+                        create_empty_file: "E1"
                     })[ruleRow.modelData.id]
                 }
                 Label {
@@ -59,6 +63,7 @@ GroupBox {
                         || ruleRow.modelData.id === "video_extensions" || ruleRow.modelData.id === "data_extensions"
                         || ruleRow.modelData.id === "music_videos"
                         || ruleRow.modelData.id === "non_video_to_root" || ruleRow.modelData.id === "non_image_to_root"
+                        || ruleRow.modelData.id === "create_empty_file"
                         ? qsTr("file") : qsTr("folder")
                 }
                 Label {
@@ -78,7 +83,8 @@ GroupBox {
                         flatten_videos: qsTr("video"),
                         flatten_images: qsTr("image"),
                         non_video_to_root: qsTr("video"),
-                        non_image_to_root: qsTr("image")
+                        non_image_to_root: qsTr("image"),
+                        create_empty_file: qsTr("other")
                     })[ruleRow.modelData.id]
                 }
                 CheckBox {
@@ -98,10 +104,20 @@ GroupBox {
                         flatten_videos: qsTr("Flatten videos folder"),
                         flatten_images: qsTr("Flatten images folder"),
                         non_video_to_root: qsTr("Move non-video files to root"),
-                        non_image_to_root: qsTr("Move non-image files to root")
+                        non_image_to_root: qsTr("Move non-image files to root"),
+                        create_empty_file: qsTr("Create empty file")
                     })[ruleRow.modelData.id]
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
+                }
+                TextField {
+                    objectName: ruleRow.modelData.id + "FileName"
+                    visible: ruleRow.modelData.id === "create_empty_file"
+                    Layout.preferredWidth: 180
+                    text: panel.controller.emptyFileName
+                    Accessible.name: qsTr("Filename in project root")
+                    enabled: !panel.controller.running
+                    onEditingFinished: panel.controller.emptyFileName = text
                 }
                 Button {
                     objectName: ruleRow.modelData.id + "Check"

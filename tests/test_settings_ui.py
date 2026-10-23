@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import Q_ARG, QEvent, QEventLoop, QMetaObject, QObject, QPointF, QSettings, QTimer, Qt, QUrl
-from PySide6.QtGui import QGuiApplication, QKeyEvent
+from PySide6.QtGui import QGuiApplication, QImage, QKeyEvent
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtWidgets import QApplication
@@ -27,6 +27,93 @@ APP.setApplicationName("FolderConformerTests")
 
 
 class SettingsUiTests(unittest.TestCase):
+    def test_parallel_image_worker_pause_resume_stop_and_cancel(self):
+        for action in ("resume", "stop", "cancel"):
+            with self.subTest(action=action):
+                folder = Path(self.temporary.name) / action
+                (folder / "photo").mkdir(parents=True)
+                for index in range(6):
+                    image = QImage(80, 40, QImage.Format.Format_RGB32)
+                    image.fill(Qt.GlobalColor.red)
+                    self.assertTrue(image.save(str(folder / "photo" / f"{index}.png")))
+                controller = Controller(str(folder))
+                controller._rules = [{"id": "landscape_images", "enabled": True}]
+                controller.setWorkerThreads("landscape_images", 3)
+                loop = QEventLoop()
+                controller.runStateChanged.connect(lambda: loop.quit() if controller.runState == "paused" else None)
+                results = []
+                progress = []
+                controller.completed.connect(lambda code: (results.append(code), loop.quit()))
+                controller.progress.connect(lambda current, total, seconds: progress.append((current, total)))
+                controller.start()
+                controller.pause()
+                QTimer.singleShot(10000, loop.quit)
+                loop.exec()
+                self.assertEqual(controller.runState, "paused")
+                self.assertEqual(len(list((folder / "photo").glob("*.png"))), 6)
+                if action == "resume":
+                    controller.pause()
+                elif action == "stop":
+                    controller.stop()
+                else:
+                    controller.cancel()
+                QTimer.singleShot(10000, loop.quit)
+                loop.exec()
+                self.assertEqual(len(results), 1)
+                self.assertFalse(controller.running)
+                if action == "resume":
+                    self.assertEqual(results, [0])
+                    self.assertEqual(progress, [(i, 6) for i in range(1, 7)])
+                    self.assertEqual(len(list((folder / "photo/Landscape-FULL").glob("*.png"))), 6)
+                else:
+                    self.assertEqual(len(list((folder / "photo").glob("*.png"))), 6)
+
+    def test_parallel_check_all_reports_each_rule_without_changes(self):
+        controller = Controller(self.temporary.name)
+        controller._rules = [{"id": rule, "enabled": True} for rule in
+                             ("extension", "remove_empty_dirs", "create_empty_file")]
+        controller.setWorkerThreads("checks", 3)
+        marker = Path(self.temporary.name) / "keep.txt"
+        marker.write_text("keep")
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertEqual(controller.checkStatuses,
+                         {"extension": "BAD", "remove_empty_dirs": "OK", "create_empty_file": "BAD"})
+        self.assertEqual(marker.read_text(), "keep")
+        self.assertFalse((Path(self.temporary.name) / ".forceGallery").exists())
+
+    def test_empty_file_inline_setting_checks_and_runs_once(self):
+        controller = Controller(self.temporary.name)
+        self.assertEqual(controller.emptyFileName, ".forceGallery")
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        field = self.rule_control(window, "create_empty_fileFileName")
+        self.assertTrue(field.property("visible"))
+        self.assertEqual(field.property("text"), ".forceGallery")
+        field.setProperty("text", "custom.marker")
+        QMetaObject.invokeMethod(field, "editingFinished")
+        self.assertEqual(Controller().emptyFileName, "custom.marker")
+        controller.checkRule("create_empty_file")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["create_empty_file"], "BAD")
+        index = next(i for i, rule in enumerate(controller.rules) if rule["id"] == "create_empty_file")
+        controller.start(index)
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertEqual((Path(self.temporary.name) / "custom.marker").read_bytes(), b"")
+        controller.checkRule("create_empty_file")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["create_empty_file"], "OK")
+        controller.setEnabled(index, True)
+        self.assertEqual(controller.targetTree.item(controller.targetTree.rowCount() - 1).text(), "custom.marker")
+        controller.moveRule(index, -1)
+        self.assertEqual(Controller().emptyFileName, "custom.marker")
+        window.close()
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -120,10 +207,11 @@ class SettingsUiTests(unittest.TestCase):
         controller.output.emit("Activity output")
         APP.processEvents()
         log = window.findChild(QQuickItem, "applicationLog")
-        self.assertIn("Check: extension BAD", log.property("text"))
+        self.assertIn("[N4] Check: extension BAD", log.property("text"))
         copy = window.findChild(QQuickItem, "copyOutput")
+        output_scroll = window.findChild(QQuickItem, "outputScroll")
         self.assertGreaterEqual(copy.mapToScene(QPointF(0, 0)).y(),
-                                log.mapToScene(QPointF(0, log.height())).y())
+                                output_scroll.mapToScene(QPointF(0, output_scroll.height())).y())
         QMetaObject.invokeMethod(copy, "clicked")
         self.assertEqual(APP.clipboard().text(), log.property("text"))
         for index in range(len(controller.rules)):
@@ -150,8 +238,10 @@ class SettingsUiTests(unittest.TestCase):
         controller.process.start()
         self.assertTrue(controller.process.waitForFinished(10000))
         text = "".join(output)
-        self.assertEqual(text, stream.getvalue())
-        for expected in ("WARNING folderconformer.updates: Application warning", "Starting conform:",
+        self.assertIn("WARNING folderconformer.updates: Application warning", stream.getvalue())
+        self.assertNotIn("Application warning", text)
+        self.assertEqual(text, "".join(stream.getvalue().splitlines(keepends=True)[1:]))
+        for expected in ("Starting conform:",
                          "worker output", "stderr detail", "Traceback (most recent call last):",
                          "RuntimeError: actual failure", "exit_code=1 (0x00000001), exit_status=NormalExit"):
             self.assertIn(expected, text)
@@ -453,7 +543,8 @@ class SettingsUiTests(unittest.TestCase):
                                                                   {"id": "flatten_videos", "enabled": False},
                                                                   {"id": "flatten_images", "enabled": False},
                                                                   {"id": "non_video_to_root", "enabled": True},
-                                                                  {"id": "non_image_to_root", "enabled": True}])
+                                                                  {"id": "non_image_to_root", "enabled": True},
+                                                                  {"id": "create_empty_file", "enabled": False}])
         restored.setEnabled(2, False)
         restored.moveRule(2, -1)
         self.assertEqual(Controller().rules, restored.rules)
@@ -469,7 +560,7 @@ class SettingsUiTests(unittest.TestCase):
         window.requestActivate()
         self.assertTrue(QTest.qWaitForWindowActive(window))
         self.assertFalse(self.rule_control(window, "landscapeMoveUp").property("enabled"))
-        self.assertFalse(self.rule_control(window, "non_image_to_rootMoveDown").property("enabled"))
+        self.assertFalse(self.rule_control(window, "create_empty_fileMoveDown").property("enabled"))
         for name in ("rename_imagesMoveDown", "rename_imagesEnabled"):
             QTest.qWait(30)
             control = self.rule_control(window, name)
@@ -660,7 +751,8 @@ class SettingsUiTests(unittest.TestCase):
         summary = "0 files processed, 0 files moved, 2 folders renamed."
         self.assertEqual(summaries, [summary])
         screen = window.findChild(QObject, "conformerScreen")
-        self.assertEqual(screen.property("status"), "Complete: " + summary)
+        self.assertEqual(screen.property("status"), "Complete")
+        self.assertEqual(screen.property("statusDetails"), summary)
         window.close()
 
     def test_worker_ignores_old_recursive_setting_and_only_groups_loose_files(self):
@@ -697,8 +789,8 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(second.folder, first.folder)
         self.assertEqual(second.landscapeFolder, "Wide media")
         self.assertEqual(second.rules, [{"id": "extension", "enabled": True}, {"id": "landscape", "enabled": False}]
-                                 + [{"id": rule_id, "enabled": rule_id not in ("remove_empty_dirs", "flatten_videos", "flatten_images")} for rule_id in
-                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions", "music_videos", "flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root")])
+                                 + [{"id": rule_id, "enabled": rule_id not in ("remove_empty_dirs", "flatten_videos", "flatten_images", "create_empty_file")} for rule_id in
+                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions", "music_videos", "flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root", "create_empty_file")])
         second.moveRule(5, -1)
         second.setEnabled(4, False)
         self.assertEqual(Controller().rules, second.rules)

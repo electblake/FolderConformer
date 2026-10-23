@@ -7,9 +7,14 @@ Pane {
     objectName: "conformerScreen"
     required property QtObject controller
     property string status: qsTr("Ready")
+    property string statusDetails: ""
     property string completionSummary: ""
     property int processed: 0
     property int total: 0
+    property int remainingSeconds: 0
+    function scrollOutputToBottom() {
+        outputScroll.contentItem.contentY = Math.max(0, outputScroll.contentItem.contentHeight - outputScroll.contentItem.height)
+    }
     implicitHeight: contentLayout.Layout.minimumHeight + topPadding + bottomPadding
 
     ColumnLayout {
@@ -36,7 +41,9 @@ Pane {
                     screen.completionSummary = ""
                     screen.processed = 0
                     screen.total = 0
+                    screen.remainingSeconds = 0
                     screen.status = qsTr("Processing…")
+                    screen.statusDetails = ""
                     screen.controller.start(index)
                 }
             }
@@ -58,7 +65,9 @@ Pane {
                         screen.completionSummary = ""
                         screen.processed = 0
                         screen.total = 0
+                        screen.remainingSeconds = 0
                         screen.status = qsTr("Processing…")
+                        screen.statusDetails = ""
                         screen.controller.start()
                     }
                 }
@@ -111,14 +120,33 @@ Pane {
             value: screen.processed
             visible: screen.controller.running && !screen.controller.checking
         }
-        Label {
-            text: screen.controller.runState === "pausing" ? qsTr("Pausing after current rules…")
-                : screen.controller.runState === "paused" ? qsTr("Paused")
-                : screen.controller.runState === "stopping" ? qsTr("Stopping after current rules…")
-                : screen.controller.runState === "cancelling" ? qsTr("Cancelling…")
-                : screen.status
+        RowLayout {
+            Layout.fillWidth: true
+            Label {
+                objectName: "processingStatus"
+                HoverHandler { id: statusHover }
+                ToolTip.visible: statusHover.hovered
+                ToolTip.text: screen.controller.runState === "pausing" ? qsTr("Pausing after current rules…")
+                    : screen.controller.runState === "stopping" ? qsTr("Stopping after current rules…")
+                    : screen.statusDetails
+                text: screen.controller.runState === "pausing" ? qsTr("Pausing…")
+                    : screen.controller.runState === "paused" ? qsTr("Paused")
+                    : screen.controller.runState === "stopping" ? qsTr("Stopping…")
+                    : screen.controller.runState === "cancelling" ? qsTr("Cancelling…")
+                    : screen.status
+            }
+            Item { Layout.fillWidth: true }
+            Label {
+                objectName: "processingEta"
+                text: qsTr("ETA %1:%2:%3")
+                    .arg(String(Math.floor(screen.remainingSeconds / 3600)).padStart(2, "0"))
+                    .arg(String(Math.floor(screen.remainingSeconds / 60) % 60).padStart(2, "0"))
+                    .arg(String(screen.remainingSeconds % 60).padStart(2, "0"))
+            }
         }
         ScrollView {
+            id: outputScroll
+            objectName: "outputScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: 120
@@ -132,29 +160,63 @@ Pane {
                 Accessible.name: qsTr("Application log")
             }
         }
-        Button {
-            objectName: "copyOutput"
+        RowLayout {
             Layout.alignment: Qt.AlignRight
-            text: qsTr("Copy Output")
-            onClicked: {
-                log.selectAll()
-                log.copy()
+            Button {
+                objectName: "clearOutput"
+                text: qsTr("Clear Output")
+                onClicked: screen.controller.clearOutput()
+            }
+            Button {
+                objectName: "copyOutput"
+                text: qsTr("Copy Output")
+                onClicked: {
+                    log.selectAll()
+                    log.copy()
+                }
+            }
+            Button {
+                objectName: "goToBottom"
+                text: qsTr("Go to Bottom")
+                onClicked: screen.scrollOutputToBottom()
             }
         }
     }
     Connections {
         target: screen.controller
-        function onOutput(text) { log.insert(log.length, text) }
+        function onOutput(text) {
+            const previousY = outputScroll.contentItem.contentY
+            const atBottom = previousY + outputScroll.contentItem.height >= outputScroll.contentItem.contentHeight - 1
+            let retained = log.text + text
+            if (retained.length > 100000) {
+                const cut = retained.indexOf("\n", retained.length - 100001)
+                retained = cut >= 0 ? retained.slice(cut + 1) : retained.slice(0, 100000)
+            }
+            log.text = retained.split("\n").slice(-1001).join("\n")
+            Qt.callLater(function() {
+                if (atBottom)
+                    screen.scrollOutputToBottom()
+                else
+                    outputScroll.contentItem.contentY = Math.min(previousY, Math.max(0, outputScroll.contentItem.contentHeight - outputScroll.contentItem.height))
+            })
+        }
+        function onOutputCleared() { log.clear() }
         function onCompletionSummary(text) { screen.completionSummary = text }
         function onCompleted(code) {
+            screen.remainingSeconds = 0
             screen.status = screen.controller.runState === "cancelled" ? qsTr("Cancelled")
-                : screen.controller.runState === "stopped" ? qsTr("Stopped: %1").arg(screen.completionSummary)
-                : code === 0 ? qsTr("Complete: %1").arg(screen.completionSummary) : qsTr("Process exited with code %1. See log.").arg(code)
+                : screen.controller.runState === "stopped" ? qsTr("Stopped")
+                : code === 0 ? qsTr("Complete") : qsTr("Failed")
+            screen.statusDetails = screen.controller.runState === "cancelled" ? ""
+                : screen.controller.runState === "stopped" || code === 0 ? screen.completionSummary
+                : qsTr("Process exited with code %1. See log.").arg(code)
         }
         function onProgress(current, total, seconds) {
             screen.processed = current
             screen.total = total
-            screen.status = qsTr("%1 of %2 items · About %3 s remaining").arg(current).arg(total).arg(seconds)
+            screen.status = qsTr("%1 / %2").arg(current).arg(total)
+            screen.remainingSeconds = seconds
+            screen.statusDetails = ""
         }
     }
 }

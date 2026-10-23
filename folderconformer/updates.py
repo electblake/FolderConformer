@@ -205,7 +205,7 @@ class Updates(QObject):
     @Slot(str)
     def downloaded(self, path):
         self._installer_path = path
-        self._status = "Download complete. Quit and install when ready."
+        self._status = "Download complete"
         self._progress = 1000
         self._indeterminate = False
         self.changed.emit()

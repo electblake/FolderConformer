@@ -5,17 +5,23 @@ import sys
 from fractions import Fraction
 from itertools import groupby
 from pathlib import Path
+from threading import Lock
 
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES
+from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS, MusicAnalysis, report, worker_results
 
 class RunControl:
     def __init__(self):
         self.stopped = False
+        self.lock = Lock()
 
     def checkpoint(self):
-        print("Control: ready", flush=True)
-        self.stopped = sys.stdin.readline().strip() == "stop"
-        return not self.stopped
+        with self.lock:
+            if self.stopped:
+                return False
+            report("Control: ready", flush=True)
+            self.stopped = sys.stdin.readline().strip() == "stop"
+            return not self.stopped
 
 
 def is_landscape(path: Path, ffprobe: Path) -> bool:
@@ -120,7 +126,10 @@ def empty_directories(folder: Path):
 
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
-               landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES):
+               landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES,
+               empty_file_name=".forceGallery", music_threads=1):
+    if rule_id == "create_empty_file":
+        return "OK" if (folder / empty_file_name).is_file() else "BAD"
     if rule_id == "extension":
         with os.scandir(folder) as entries:
             bad = any(entry.is_file() for entry in entries)
@@ -191,16 +200,14 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                         pending.append(Path(entry.path))
         return "OK"
     elif rule_id == "music_videos":
-        from folderconformer.music import MusicDetector
-        detector = MusicDetector(audio_classes)
         suffixes = {value.strip().lstrip(".").lower() for value in video_extensions.split(";") if value.strip()}
         with os.scandir(folder / video_folder) as entries:
-            for entry in entries:
-                path = Path(entry.path)
-                if entry.is_file() and path.suffix.lstrip(".").lower() in suffixes:
-                    result = detector.classify_video(path, ffprobe)
-                    if result.contains_music:
-                        return "BAD"
+            files = sorted(Path(entry.path) for entry in entries
+                           if entry.is_file() and Path(entry.name).suffix.lstrip(".").lower() in suffixes)
+        with worker_results(MusicAnalysis(audio_classes, ffprobe), files, music_threads) as results:
+            for path, result in results:
+                if result.contains_music:
+                    return "BAD"
         return "OK"
     elif rule_id in ("landscape", "landscape_images"):
         directory = video_folder if rule_id == "landscape" else image_folder
@@ -215,7 +222,7 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
     return "BAD" if bad else "OK"
 
 
-def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bool, control):
+def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bool, control, identifier):
     target.mkdir(parents=True, exist_ok=True)
     processed = moved = 0
     with os.scandir(source) as entries:
@@ -225,7 +232,7 @@ def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bo
             return processed, moved
         destination = target / child.name
         if is_directory and destination.is_dir():
-            child_processed, child_moved = merge_folder(child, destination, root, enumerate_conflicts, control)
+            child_processed, child_moved = merge_folder(child, destination, root, enumerate_conflicts, control, identifier)
             processed += child_processed
             moved += child_moved
             if control is not None and control.stopped:
@@ -234,7 +241,7 @@ def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bo
         if not is_directory:
             processed += 1
         if os.path.lexists(destination) and not enumerate_conflicts:
-            print(f"Skipped name conflict: {child.relative_to(root)} → {destination.relative_to(root)}", flush=True)
+            report(f"[{identifier}] Skipped name conflict: {child.relative_to(root)} → {destination.relative_to(root)}", flush=True)
             continue
         number = 1
         while os.path.lexists(destination):
@@ -244,7 +251,7 @@ def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bo
         child.rename(destination)
         if not is_directory:
             moved += 1
-        print(f"Moved: {child.relative_to(root)} → {destination.relative_to(root)}", flush=True)
+        report(f"[{identifier}] Moved: {child.relative_to(root)} → {destination.relative_to(root)}", flush=True)
     if not any(source.iterdir()):
         source.rmdir()
     return processed, moved
@@ -253,7 +260,8 @@ def merge_folder(source: Path, target: Path, root: Path, enumerate_conflicts: bo
 def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path,
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
-            music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES):
+            music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, empty_file_name=".forceGallery",
+            worker_threads=DEFAULT_WORKER_THREADS):
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for rule_id, group in groupby(enabled_rules, key=lambda rule: rule["id"]):
@@ -263,7 +271,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                              "music_videos": folder / video_folder}[rule_id]
             extensions = image_extensions if rule_id == "landscape_images" else video_extensions
             processed, moved = conform_files(source_folder, list(group), landscape_folder, ffprobe, extensions,
-                                            control, enumerate_conflicts, music_folder, audio_classes)
+                                            control, enumerate_conflicts, music_folder, audio_classes,
+                                            worker_threads[rule_id] if rule_id != "extension" else 1)
             files_processed += processed
             files_moved += moved
             if control is not None and control.stopped:
@@ -272,6 +281,12 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
         for rule in group:
             if control is not None and not control.checkpoint():
                 break
+            identifier = RULE_IDENTIFIERS[rule["id"]]
+            if rule["id"] == "create_empty_file":
+                (folder / empty_file_name).touch()
+                files_processed += 1
+                report(f"[1/1] [{identifier}] Created empty file: {empty_file_name}", flush=True)
+                continue
             if rule["id"] == "video_extensions":
                 files = video_files(folder, video_folder, video_extensions)
                 destination = folder / video_folder
@@ -280,7 +295,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         break
                     target = destination / source.name
                     if os.path.lexists(target) and not enumerate_conflicts:
-                        print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     else:
                         number = 1
                         while os.path.lexists(target):
@@ -289,9 +304,9 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         destination.mkdir(parents=True, exist_ok=True)
                         source.rename(target)
                         files_moved += 1
-                        print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     files_processed += 1
-                    print(f"[{index}/{len(files)}] {source.name}", flush=True)
+                    report(f"[{index}/{len(files)}] [{identifier}] {source.name}", flush=True)
                 if control is not None and control.stopped:
                     break
                 continue
@@ -303,7 +318,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         break
                     target = destination / source.name
                     if os.path.lexists(target) and not enumerate_conflicts:
-                        print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     else:
                         number = 1
                         while os.path.lexists(target):
@@ -312,9 +327,9 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         destination.mkdir(parents=True, exist_ok=True)
                         source.rename(target)
                         files_moved += 1
-                        print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     files_processed += 1
-                    print(f"[{index}/{len(files)}] {source.name}", flush=True)
+                    report(f"[{index}/{len(files)}] [{identifier}] {source.name}", flush=True)
                 if control is not None and control.stopped:
                     break
                 continue
@@ -326,7 +341,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         break
                     target = destination / source.name
                     if os.path.lexists(target) and not enumerate_conflicts:
-                        print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     else:
                         number = 1
                         while os.path.lexists(target):
@@ -335,9 +350,9 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         destination.mkdir(parents=True, exist_ok=True)
                         source.rename(target)
                         files_moved += 1
-                        print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     files_processed += 1
-                    print(f"[{index}/{len(files)}] {source.name}", flush=True)
+                    report(f"[{index}/{len(files)}] [{identifier}] {source.name}", flush=True)
                 if control is not None and control.stopped:
                     break
                 continue
@@ -369,7 +384,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         break
                     target = destination / source.name
                     if os.path.lexists(target) and not enumerate_conflicts:
-                        print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     else:
                         number = 1
                         while os.path.lexists(target):
@@ -377,9 +392,9 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                             number += 1
                         source.rename(target)
                         files_moved += 1
-                        print(f"{source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                        report(f"[{identifier}] {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                     files_processed += 1
-                    print(f"[{index}/{len(files)}] {source.name}", flush=True)
+                    report(f"[{index}/{len(files)}] [{identifier}] {source.name}", flush=True)
                 if control is not None and control.stopped:
                     break
                 continue
@@ -390,8 +405,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                         break
                     directory.rmdir()
                     removed += 1
-                    print(f"Removed empty folder: {directory.relative_to(folder)}", flush=True)
-                print(f"Removed {removed} empty folders.", flush=True)
+                    report(f"[{identifier}] Removed empty folder: {directory.relative_to(folder)}", flush=True)
+                report(f"[{identifier}] Removed {removed} empty folders.", flush=True)
                 if control is not None and control.stopped:
                     break
                 continue
@@ -406,42 +421,42 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     target.parent.mkdir(parents=True, exist_ok=True)
                     source.rename(target)
                     folders_renamed += 1
-                    print(f"[{index}/{len(sources)}] Renamed folder: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                    report(f"[{index}/{len(sources)}] [{identifier}] Renamed folder: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
                 else:
-                    processed, moved = merge_folder(source, target, folder, enumerate_conflicts, control)
+                    processed, moved = merge_folder(source, target, folder, enumerate_conflicts, control, identifier)
                     files_processed += processed
                     files_moved += moved
                     if control is not None and control.stopped:
                         break
-                    print(f"[{index}/{len(sources)}] Merged folder: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                    report(f"[{index}/{len(sources)}] [{identifier}] Merged folder: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
             target.mkdir(parents=True, exist_ok=True)
         if control is not None and control.stopped:
             break
-    print(f"Completed: {files_processed} files processed, {files_moved} files moved, "
+    report(f"Completed: {files_processed} files processed, {files_moved} files moved, "
           f"{folders_renamed} folders renamed.", flush=True)
 
 
 def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, extensions: str, control=None, enumerate_conflicts: bool = False,
-                  music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES):
+                  music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, threads=1):
+    identifier = RULE_IDENTIFIERS[rules[0]["id"]]
     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
     files = []
-    print(f"Scanning {folder}", flush=True)
+    report(f"[{identifier}] Scanning {folder}", flush=True)
     with os.scandir(folder) as entries:
         for checked, entry in enumerate(entries, 1):
             if entry.is_file():
                 files.append(Path(entry.path))
             if checked % 500 == 0:
-                print(f"Scanning: {checked} entries checked, {len(files)} files found", flush=True)
+                report(f"[{identifier}] Scanning: {checked} entries checked, {len(files)} files found", flush=True)
     files.sort()
-    print(f"Found {len(files)} files", flush=True)
+    report(f"[{identifier}] Found {len(files)} files", flush=True)
     moved = 0
     processed = 0
-    if any(rule["id"] == "music_videos" and rule["enabled"] for rule in rules):
-        from folderconformer.music import MusicDetector
-        detector = MusicDetector(audio_classes)
-    for index, source in enumerate(files, 1):
+    music_analysis = MusicAnalysis(audio_classes, ffprobe, control)
+
+    def destination_for(source):
         if control is not None and not control.checkpoint():
-            break
+            return folder
         destination = folder
         for rule in rules:
             if not rule["enabled"]:
@@ -451,27 +466,33 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
                     destination /= landscape_folder
             elif rule["id"] == "music_videos":
                 if source.suffix.lstrip(".").lower() in suffixes:
-                    result = detector.classify_video(source, ffprobe, control)
+                    result = music_analysis(source)
                     if control is not None and control.stopped:
-                        return processed, moved
-                    print(f"Music: {source.name}, score={result.max_window_score:.6f}, thresholds={result.thresholds}", flush=True)
+                        return folder
+                    report(f"[{identifier}] Music: {source.name}, score={result.max_window_score:.6f}, thresholds={result.thresholds}", flush=True)
                     if result.contains_music:
                         destination /= music_folder
             elif rule["id"] == "extension":
                 destination /= source.suffix.lstrip(".").lower() or "no-extension"
-        target = destination / source.name if destination != folder else source
-        if target != source:
-            if os.path.lexists(target) and not enumerate_conflicts:
-                print(f"Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
-            else:
-                number = 1
-                while os.path.lexists(target):
-                    target = destination / f"{source.stem}_{number}{source.suffix}"
-                    number += 1
-                destination.mkdir(parents=True, exist_ok=True)
-                source.rename(target)
-                moved += 1
-                print(f"{source.name} → {target.relative_to(folder)}", flush=True)
-        print(f"[{index}/{len(files)}] {source.name}", flush=True)
-        processed += 1
+        return destination
+
+    with worker_results(destination_for, files, threads) as results:
+        for index, (source, destination) in enumerate(results, 1):
+            if control is not None and (control.stopped or (threads > 1 and not control.checkpoint())):
+                break
+            target = destination / source.name if destination != folder else source
+            if target != source:
+                if os.path.lexists(target) and not enumerate_conflicts:
+                    report(f"[{identifier}] Skipped name conflict: {source.relative_to(folder)} → {target.relative_to(folder)}", flush=True)
+                else:
+                    number = 1
+                    while os.path.lexists(target):
+                        target = destination / f"{source.stem}_{number}{source.suffix}"
+                        number += 1
+                    destination.mkdir(parents=True, exist_ok=True)
+                    source.rename(target)
+                    moved += 1
+                    report(f"[{identifier}] {source.name} → {target.relative_to(folder)}", flush=True)
+            report(f"[{index}/{len(files)}] [{identifier}] {source.name}", flush=True)
+            processed += 1
     return processed, moved

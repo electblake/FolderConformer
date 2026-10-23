@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 
 from folderconformer.music_model import MODEL_PATH, MODEL_VERSION, DEFAULT_AUDIO_CLASSES
+from folderconformer.workers import report
 
 
 SAMPLE_RATE = 16000
@@ -100,7 +101,7 @@ class MusicDetector:
                             stream["index"], int(channel), (start + frame * HOP_SAMPLES) / SAMPLE_RATE,
                             min(end, start + frame * HOP_SAMPLES + FRAME_SAMPLES) / SAMPLE_RATE,
                             self.labels[label], float(scores[channel, frame, label])))
-                    print(f"Audio: {path.name}, stream {stream['index']}, {end / SAMPLE_RATE:.1f}s analyzed", flush=True)
+                    report(f"[M5] Audio: {path.name}, stream {stream['index']}, {end / SAMPLE_RATE:.1f}s analyzed", flush=True)
                     if evidence:
                         return MusicDetection(True, maximum, self.thresholds, tuple(evidence))
                 subprocess.CompletedProcess(command, decoder.wait()).check_returncode()

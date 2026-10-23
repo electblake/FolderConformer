@@ -25,6 +25,19 @@ FOLDERS = ("video", "photo", "mp4;mkv", "png", "Data", "txt")
 
 
 class MusicTests(unittest.TestCase):
+    def test_parallel_music_detection_moves_and_checks_real_videos(self):
+        self.video("video/a.mp4")
+        self.video("video/b.mp4")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(check_rule(self.root, "music_videos", *FOLDERS, FFPROBE, "Wide",
+                                        music_threads=2), "BAD")
+        self.run_music(worker_threads={"landscape": 1, "landscape_images": 1, "music_videos": 2, "checks": 1})
+        self.assertTrue((self.root / "video/with-music/a.mp4").is_file())
+        self.assertTrue((self.root / "video/with-music/b.mp4").is_file())
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(check_rule(self.root, "music_videos", *FOLDERS, FFPROBE, "Wide",
+                                        music_threads=2), "OK")
+
     @classmethod
     def setUpClass(cls):
         cls.detector = MusicDetector()
@@ -47,12 +60,20 @@ class MusicTests(unittest.TestCase):
         return path
 
     def classify(self, path):
-        with contextlib.redirect_stdout(io.StringIO()):
-            return self.detector.classify_video(path, FFPROBE)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = self.detector.classify_video(path, FFPROBE)
+        for line in output.getvalue().splitlines():
+            self.assertTrue(line.startswith("[M5] "), line)
+        return result
 
     def run_music(self, **kwargs):
-        with contextlib.redirect_stdout(io.StringIO()):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             conform(self.root, [{"id": "music_videos", "enabled": True}], "Wide", FFPROBE, *FOLDERS, **kwargs)
+        for line in output.getvalue().splitlines():
+            if not line.startswith(("Completed: ", "Control: ready")):
+                self.assertRegex(line, r"^(?:\[\d+/\d+\] )?\[M5\] ")
 
     def test_recording_hashes_match_published_sources(self):
         for row in json.loads((ROOT / "tests/music-fixtures.json").read_text(encoding="utf-8")):

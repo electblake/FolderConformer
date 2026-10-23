@@ -7,22 +7,24 @@ import os
 import re
 import sys
 import subprocess
+from collections import deque
 from importlib.metadata import version
 from pathlib import Path
 
 import qt_themes
 from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QEvent, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QElapsedTimer, QEvent, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QTimer, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QSpinBox, QStyle, QVBoxLayout, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates, install_after_exit
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MODEL_PATH, MUSIC_THRESHOLD
+from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS, report, worker_results
 
 
 class StandardIconProvider(QQuickImageProvider):
@@ -44,13 +46,26 @@ class StandardIconProvider(QQuickImageProvider):
 
 
 class ActivityLogHandler(logging.Handler):
-    def __init__(self, output):
+    def __init__(self):
         super().__init__()
-        self.output = output
+        self.lines = deque()
+        self.characters = 0
         self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 
     def emit(self, record):
-        self.output.emit(self.format(record) + "\n")
+        text = self.format(record)[:99999] + "\n"
+        for line in text.splitlines(keepends=True):
+            self.lines.append(line)
+            self.characters += len(line)
+            while len(self.lines) > 1000 or self.characters > 100000:
+                self.characters -= len(self.lines.popleft())
+
+    def drain(self):
+        with self.lock:
+            text = "".join(self.lines)
+            self.lines.clear()
+            self.characters = 0
+            return text
 
 
 class Controller(QObject):
@@ -59,6 +74,7 @@ class Controller(QObject):
     runningChanged = Signal()
     runStateChanged = Signal()
     output = Signal(str)
+    outputCleared = Signal()
     completed = Signal(int)
     progress = Signal(int, int, int)
     completionSummary = Signal(str)
@@ -67,7 +83,11 @@ class Controller(QObject):
 
     def __init__(self, folder=None):
         super().__init__()
-        self.log_handler = ActivityLogHandler(self.output)
+        self.log_handler = ActivityLogHandler()
+        self.output_timer = QTimer(self)
+        self.output_timer.setInterval(100)
+        self.output_timer.timeout.connect(self.flush_output)
+        self.output_timer.start()
         logger = logging.getLogger("folderconformer")
         logger.setLevel(logging.INFO)
         logger.addHandler(self.log_handler)
@@ -95,6 +115,9 @@ class Controller(QObject):
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
+        self._empty_file_name = self.settings.value("emptyFileName", ".forceGallery", type=str)
+        self._worker_threads = json.loads(self.settings.value(
+            "performance/workerThreads", json.dumps(DEFAULT_WORKER_THREADS), type=str))
         self._video_extensions = self.settings.value(
             "videoExtensions", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf", type=str
         )
@@ -116,6 +139,8 @@ class Controller(QObject):
         for rule_id in ("flatten_videos", "flatten_images", "non_video_to_root", "non_image_to_root"):
             if not any(rule["id"] == rule_id for rule in self._rules):
                 self._rules.append({"id": rule_id, "enabled": rule_id.startswith("non_")})
+        if not any(rule["id"] == "create_empty_file" for rule in self._rules):
+            self._rules.append({"id": "create_empty_file", "enabled": False})
         self._target_tree = QStandardItemModel(self)
         self.configurationChanged.connect(self.update_target_tree)
         self.update_target_tree()
@@ -169,6 +194,8 @@ class Controller(QObject):
             for extension in grouped_extensions:
                 roots.append((f"extension.{extension}", f"{extension}/",
                               [(f"file.{extension}", f"file.{extension}", [])]))
+        if "create_empty_file" in enabled:
+            roots.append(("create_empty_file", self._empty_file_name, []))
         self.sync_target_items(self._target_tree.invisibleRootItem(), roots)
 
     def sync_target_items(self, parent, entries):
@@ -202,6 +229,8 @@ class Controller(QObject):
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
         self.settings.setValue("dataFolder", self._data_folder)
+        self.settings.setValue("emptyFileName", self._empty_file_name)
+        self.settings.setValue("performance/workerThreads", json.dumps(self._worker_threads))
         self.settings.setValue("videoExtensions", self._video_extensions)
         self.settings.setValue("imageExtensions", self._image_extensions)
         self.settings.setValue("dataExtensions", self._data_extensions)
@@ -270,6 +299,26 @@ class Controller(QObject):
         self._music_video_folder = value
         self._check_statuses = {}
         self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def emptyFileName(self):
+        return self._empty_file_name
+
+    @emptyFileName.setter
+    def emptyFileName(self, value):
+        self._empty_file_name = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property("QVariantMap", notify=configurationChanged)
+    def workerThreads(self):
+        return self._worker_threads
+
+    @Slot(str, int)
+    def setWorkerThreads(self, worker, count):
+        self._worker_threads[worker] = count
         self.save()
 
     @Property("QVariantList", notify=configurationChanged)
@@ -380,7 +429,8 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
-                               self._landscape_folder, self._music_video_folder, json.dumps(self._audio_classes)])
+                               self._landscape_folder, self._music_video_folder, json.dumps(self._audio_classes),
+                               self._empty_file_name, json.dumps(self._worker_threads)])
 
     @Slot()
     def checkAll(self):
@@ -393,7 +443,8 @@ class Controller(QObject):
         self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
                                 self._image_folder, self._video_extensions, self._image_extensions,
                                 self._data_folder, self._data_extensions, self._landscape_folder,
-                                self._music_video_folder, json.dumps(self._audio_classes)])
+                                self._music_video_folder, json.dumps(self._audio_classes), self._empty_file_name,
+                                json.dumps(self._worker_threads)])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -476,7 +527,7 @@ class Controller(QObject):
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      self._data_folder, self._data_extensions, self._music_video_folder,
-                     json.dumps(self._audio_classes), "--controlled"]
+                     json.dumps(self._audio_classes), self._empty_file_name, json.dumps(self._worker_threads), "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -486,6 +537,7 @@ class Controller(QObject):
         self._launch("explorer", ["--install-explorer"])
 
     def _launch(self, kind, arguments):
+        self.clearOutput()
         self._kind = kind
         self.decoder = codecs.getincrementaldecoder("utf-8")()
         self.pending = ""
@@ -498,6 +550,17 @@ class Controller(QObject):
         self.process.start()
 
     @Slot()
+    def clearOutput(self):
+        self.log_handler.drain()
+        self.outputCleared.emit()
+
+    @Slot()
+    def flush_output(self):
+        text = self.log_handler.drain()
+        if text:
+            self.output.emit(text)
+
+    @Slot()
     def read_output(self):
         text = self.decoder.decode(bytes(self.process.readAllStandardOutput()))
         self.pending += text
@@ -505,8 +568,8 @@ class Controller(QObject):
         self.pending = lines.pop()
         for line in lines:
             if self._kind in ("check", "checks") and line.startswith("Check: "):
-                logging.getLogger("folderconformer.worker").info(line.rstrip("\r"))
                 _, rule_id, status = line.split()
+                logging.getLogger("folderconformer.worker").info("[%s] %s", RULE_IDENTIFIERS[rule_id], line.rstrip("\r"))
                 self._check_statuses[rule_id] = status
                 self.checkStatusesChanged.emit()
                 continue
@@ -534,6 +597,7 @@ class Controller(QObject):
         logging.getLogger(__name__).error("%s process error %s: %s; command: %s", self._kind,
                                           error.name, self.process.errorString(),
                                           subprocess.list2cmdline([self.process.program(), *self.process.arguments()]))
+        self.flush_output()
         if self._kind == "check" and error == QProcess.ProcessError.FailedToStart:
             self._check_statuses[self._check_rule_id] = "ERR"
             self.checkStatusesChanged.emit()
@@ -548,6 +612,7 @@ class Controller(QObject):
             logging.ERROR if code != 0 or _status == QProcess.ExitStatus.CrashExit else logging.INFO,
             "%s process finished: exit_code=%s (0x%08X), exit_status=%s", self._kind, code,
             code & 0xFFFFFFFF, _status.name)
+        self.flush_output()
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
         elif self._kind in ("check", "checks"):
@@ -573,7 +638,7 @@ class MainWindow(QMainWindow):
         self.menu_actions = []
         for title, items in (
             ("&File", ("selectFolderMenu", "settingsMenu", None, "quitMenu")),
-            ("&View", ("inputFolderMenu", "previewMenu", "foldersMenu", "filesMenu", "audioMenu", None, "resetLayoutMenu")),
+            ("&View", ("inputFolderMenu", "previewMenu", "performanceMenu", "foldersMenu", "filesMenu", "audioMenu", None, "resetLayoutMenu")),
             ("&Help", ("aboutMenu", "checkForUpdatesMenu", "installExplorerMenu")),
         ):
             menu = self.menuBar().addMenu(self.tr(title))
@@ -620,7 +685,8 @@ class MainWindow(QMainWindow):
         self.input_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("inputVisible", visible))
         quick_window.inputToggled.connect(self.input_dock.setVisible)
         controller.configurationChanged.connect(self.sync_input)
-        self.preview_dock = QDockWidget(self.tr("Target folder preview"), self)
+        self.preview_dock = QDockWidget(self.tr("Conformant Folder"), self)
+        self.preview_dock.setToolTip(self.tr("Preview"))
         self.preview_dock.setObjectName("targetTreeDock")
         self.preview = QQuickWidget(QQmlEngine.contextForObject(quick_window).engine(), self)
         self.preview.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
@@ -638,6 +704,42 @@ class MainWindow(QMainWindow):
         self.resizeDocks([self.preview_dock], [280], Qt.Orientation.Horizontal)
         self.preview_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("previewVisible", visible))
         quick_window.previewToggled.connect(self.preview_dock.setVisible)
+        self.performance_dock = QDockWidget(self.tr("Performance"), self)
+        self.performance_dock.setObjectName("performanceDock")
+        performance_contents = QWidget()
+        performance_layout = QVBoxLayout(performance_contents)
+        threads_group = QGroupBox(self.tr("Processing threads"))
+        threads_group.setToolTip(self.tr("Rules and file changes run in order."))
+        threads_form = QFormLayout(threads_group)
+        threads_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.thread_fields = {}
+        for worker, label in (("landscape", self.tr("Video orientation")),
+                              ("landscape_images", self.tr("Image orientation")),
+                              ("music_videos", self.tr("Music detection")),
+                              ("checks", self.tr("Rule checks"))):
+            field = QSpinBox()
+            field.setObjectName(worker + "Threads")
+            field.setRange(1, 64)
+            field.setValue(controller.workerThreads[worker])
+            field.setAccessibleName(label + self.tr(" processing threads"))
+            if worker != "checks":
+                field.setToolTip(self.tr("Rule: ") + RULE_IDENTIFIERS[worker])
+            if worker == "music_videos":
+                field.setToolTip(field.toolTip() + self.tr(". Each music thread loads its own model."))
+            field.valueChanged.connect(lambda count, key=worker: controller.setWorkerThreads(key, count))
+            threads_form.addRow(label, field)
+            threads_form.labelForField(field).setToolTip(field.toolTip())
+            self.thread_fields[worker] = field
+        performance_layout.addWidget(threads_group)
+        performance_layout.addStretch()
+        performance_scroll = QScrollArea()
+        performance_scroll.setWidgetResizable(True)
+        performance_scroll.setWidget(performance_contents)
+        self.performance_dock.setWidget(performance_scroll)
+        self.splitDockWidget(self.preview_dock, self.performance_dock, Qt.Orientation.Vertical)
+        self.performance_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("performanceVisible", visible))
+        quick_window.performanceToggled.connect(self.performance_dock.setVisible)
+        controller.configurationChanged.connect(self.sync_performance)
         self.folders_dock = QDockWidget(self.tr("Folders"), self)
         self.folders_dock.setObjectName("foldersDock")
         contents = QWidget()
@@ -670,21 +772,23 @@ class MainWindow(QMainWindow):
         files_form = QFormLayout(files_contents)
         files_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.file_fields = {}
-        for name, text in (("videoExtensions", self.tr("Video file extensions (separated by semicolons)")),
-                           ("imageExtensions", self.tr("Image file extensions (separated by semicolons)")),
-                           ("dataExtensions", self.tr("Data file extensions (separated by semicolons)"))):
+        for name, text in (("videoExtensions", self.tr("Video file extensions")),
+                           ("imageExtensions", self.tr("Image file extensions")),
+                           ("dataExtensions", self.tr("Data file extensions"))):
             field = QLineEdit(getattr(controller, name))
             field.setObjectName(name)
             field.setAccessibleName(text)
+            field.setToolTip(self.tr("Separate extensions with semicolons."))
             field.textEdited.connect(lambda value, key=name: setattr(controller, key, value))
             label = QLabel(text)
+            label.setToolTip(field.toolTip())
             label.setWordWrap(True)
             label.setBuddy(field)
             files_form.addRow(label, field)
             self.file_fields[name] = field
-        self.enumerate_conflicts = QCheckBox(self.tr("Resolve name conflicts (_1, _2, …)"))
+        self.enumerate_conflicts = QCheckBox(self.tr("Resolve name conflicts"))
         self.enumerate_conflicts.setObjectName("enumerateConflicts")
-        self.enumerate_conflicts.setToolTip(self.tr("When unchecked, skip files whose destination name already exists."))
+        self.enumerate_conflicts.setToolTip(self.tr("Number conflicting names with _1, _2, … When unchecked, skip files whose destination name already exists."))
         self.enumerate_conflicts.setChecked(controller.enumerateConflicts)
         self.enumerate_conflicts.clicked.connect(lambda checked: setattr(controller, "enumerateConflicts", checked))
         files_form.addRow(self.enumerate_conflicts)
@@ -771,7 +875,8 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle(self.tr("About FolderConformer"))
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel(f"{APP_NAME} {APP_VERSION}"))
-        credits = QLabel(
+        credits = QLabel(self.tr("Credits"))
+        credits.setToolTip(
             f'Python {sys.version.split()[0]} · <a href="https://docs.python.org/3/license.html">PSF-2.0</a><br>'
             f'Qt / PySide6 {version("PySide6")} · <a href="https://doc.qt.io/qtforpython-6/licenses.html">LGPL-3.0 / GPL-3.0</a><br>'
             f'qt-themes {version("qt-themes")} · <a href="https://github.com/beatreichenbach/qt-themes/blob/main/LICENSE">MIT</a><br>'
@@ -780,8 +885,6 @@ class MainWindow(QMainWindow):
             'FFmpeg 8.0.1 · <a href="https://ffmpeg.org/legal.html">GPL-3.0</a>'
         )
         credits.setObjectName("aboutCredits")
-        credits.setOpenExternalLinks(True)
-        credits.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         layout.addWidget(credits)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dialog.reject)
@@ -806,6 +909,13 @@ class MainWindow(QMainWindow):
         self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.audio_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+        self.performance_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
+
+    def sync_performance(self):
+        for worker, field in self.thread_fields.items():
+            field.blockSignals(True)
+            field.setValue(self.controller.workerThreads[worker])
+            field.blockSignals(False)
 
     def sync_audio_add(self):
         selected = {mid for mid, threshold in self.controller.audioClasses}
@@ -877,6 +987,7 @@ class MainWindow(QMainWindow):
         QMetaObject.invokeMethod(self.quick_window, "closeDialogs")
         self.input_dock.close()
         self.preview_dock.close()
+        self.performance_dock.close()
         self.folders_dock.close()
         self.files_dock.close()
         self.audio_dock.close()
@@ -898,22 +1009,26 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import check_rule
         rule_ids = json.loads(sys.argv[3]) if sys.argv[1] == "--check-all" else [sys.argv[3]]
-        for rule_id in rule_ids:
-            status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
-                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
-                                sys.argv[11], json.loads(sys.argv[12]))
-            print(f"Check: {rule_id} {status}", flush=True)
+        worker_threads = json.loads(sys.argv[14])
+        def check(rule_id):
+            return check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
+                              sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
+                              sys.argv[11], json.loads(sys.argv[12]), sys.argv[13], worker_threads["music_videos"])
+        with worker_results(check, rule_ids, worker_threads["checks"]) as results:
+            for rule_id, status in results:
+                report(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[13:] else None
+        control = RunControl() if "--controlled" in sys.argv[15:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[13:],
-                music_folder=sys.argv[11], audio_classes=json.loads(sys.argv[12]))
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[15:],
+                music_folder=sys.argv[11], audio_classes=json.loads(sys.argv[12]), empty_file_name=sys.argv[13],
+                worker_threads=json.loads(sys.argv[14]))
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)

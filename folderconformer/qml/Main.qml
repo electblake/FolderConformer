@@ -14,6 +14,8 @@ ApplicationWindow {
     signal inputToggled(bool visible)
     property bool previewVisible: true
     signal previewToggled(bool visible)
+    property bool performanceVisible: true
+    signal performanceToggled(bool visible)
     property bool choosingFolder: false
     property bool foldersVisible: true
     signal foldersToggled(bool visible)
@@ -83,10 +85,17 @@ ApplicationWindow {
             }
             MenuItem {
                 objectName: "previewMenu"
-                text: qsTr("Target folder &preview")
+                text: qsTr("&Conformant Folder")
                 checkable: true
                 checked: window.previewVisible
                 onTriggered: window.previewToggled(!window.previewVisible)
+            }
+            MenuItem {
+                objectName: "performanceMenu"
+                text: qsTr("&Performance")
+                checkable: true
+                checked: window.performanceVisible
+                onTriggered: window.performanceToggled(!window.performanceVisible)
             }
             MenuItem {
                 objectName: "foldersMenu"

@@ -19,6 +19,48 @@ APP = QApplication.instance() or QApplication([])
 
 
 class DockingTests(unittest.TestCase):
+    def test_performance_dock_threads_persist_disable_and_reset(self):
+        dock = self.host.performance_dock
+        self.assertEqual(dock.windowTitle(), "Performance")
+        self.assertEqual(self.host.preview_dock.windowTitle(), "Conformant Folder")
+        self.assertEqual(self.host.preview_dock.toolTip(), "Preview")
+        self.assertTrue(all("(" not in label.text() for label in dock.findChildren(QLabel)))
+        self.assertFalse(any("Rules and file changes" in label.text() for label in dock.findChildren(QLabel)))
+        self.assertIn("Each music thread loads its own model", self.host.thread_fields["music_videos"].toolTip())
+        for field in self.host.file_fields.values():
+            self.assertEqual(field.toolTip(), "Separate extensions with semicolons.")
+        self.assertEqual(self.host.enumerate_conflicts.text(), "Resolve name conflicts")
+        self.assertIn("_1, _2", self.host.enumerate_conflicts.toolTip())
+        self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.LeftDockWidgetArea)
+        for worker, field in self.host.thread_fields.items():
+            self.assertEqual(field.value(), 1)
+            field.setValue(3)
+            self.assertEqual(Controller().workerThreads[worker], 3)
+        self.controller.setWorkerThreads("landscape", 2)
+        self.assertEqual(self.host.thread_fields["landscape"].value(), 2)
+        self.controller.updates._busy = True
+        self.controller.updates.changed.emit()
+        self.assertFalse(dock.widget().isEnabled())
+        self.controller.updates._busy = False
+        self.controller.updates.changed.emit()
+        with patch.object(Controller, "running", new_callable=PropertyMock, return_value=True):
+            self.controller.runningChanged.emit()
+            self.assertFalse(dock.widget().isEnabled())
+        self.controller.runningChanged.emit()
+        self.assertTrue(dock.widget().isEnabled())
+        dock.setFloating(True)
+        dock.close()
+        menu = self.quick.findChild(QObject, "performanceMenu")
+        self.assertFalse(menu.property("checked"))
+        QMetaObject.invokeMethod(menu, "triggered")
+        self.assertTrue(dock.isVisible())
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "resetLayoutMenu"), "triggered")
+        self.assertFalse(dock.isFloating())
+        self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.LeftDockWidgetArea)
+        dock.setFloating(True)
+        self.host.close()
+        self.assertFalse(dock.isVisible())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -112,7 +154,9 @@ class DockingTests(unittest.TestCase):
 
         def inspect_about():
             about = self.host.findChild(QDialog, "aboutDialog")
-            seen.append(about.findChild(QLabel, "aboutCredits").text())
+            credits = about.findChild(QLabel, "aboutCredits")
+            self.assertEqual(credits.text(), "Credits")
+            seen.append(credits.toolTip())
             about.reject()
 
         for _ in range(2):
@@ -684,7 +728,7 @@ class DockingTests(unittest.TestCase):
             controls[item.objectName()] = item
             pending.extend(item.childItems())
         for name in ("executeRules", "checkAll", "pauseProcessing", "stopProcessing", "cancelProcessing",
-                     "openOutputFolder", "copyOutput"):
+                     "openOutputFolder", "copyOutput", "clearOutput", "goToBottom"):
             button = controls[name]
             position = button.mapToScene(QPointF(0, 0))
             self.assertGreaterEqual(position.x(), 0, name)
@@ -752,9 +796,9 @@ def inspect():
             host.resizeDocks([host.folders_dock], [340], Qt.Horizontal)
             host.resizeDocks([host.folders_dock, host.files_dock], [450, 300], Qt.Vertical)
         else:
-            for index, dock in enumerate((host.folders_dock, host.files_dock, host.input_dock, host.preview_dock, host.audio_dock)):
+            for index, dock in enumerate((host.folders_dock, host.files_dock, host.input_dock, host.preview_dock, host.audio_dock, host.performance_dock)):
                 dock.setFloating(True)
-                dock.setGeometry(160 + index * 400, 180, 350, 420)
+                dock.setGeometry(160 + (index % 3) * 400, 180 + (index // 3) * 80, 350, 420)
             if sys.argv[3] == "folders_closed":
                 host.folders_dock.close()
             if sys.argv[3] == "preview_closed":
@@ -763,6 +807,8 @@ def inspect():
                 host.input_dock.close()
             if sys.argv[3] == "audio_closed":
                 host.audio_dock.close()
+            if sys.argv[3] == "performance_closed":
+                host.performance_dock.close()
             if sys.argv[3] == "files_closed":
                 host.files_dock.close()
     QTest.qWait(100)
@@ -771,7 +817,7 @@ def inspect():
         [dock.objectName(), host.dockWidgetArea(dock).value, dock.isFloating(),
          dock.isVisible(), dock.geometry().getRect(),
          quick.findChild(QObject, menu).property("checked")]
-        for dock, menu in ((host.folders_dock, "foldersMenu"), (host.files_dock, "filesMenu"), (host.input_dock, "inputFolderMenu"), (host.preview_dock, "previewMenu"), (host.audio_dock, "audioMenu"))
+        for dock, menu in ((host.folders_dock, "foldersMenu"), (host.files_dock, "filesMenu"), (host.input_dock, "inputFolderMenu"), (host.preview_dock, "previewMenu"), (host.audio_dock, "audioMenu"), (host.performance_dock, "performanceMenu"))
     ]
     if sys.argv[4] == "restart":
         controller.restart()
@@ -781,7 +827,7 @@ QTimer.singleShot(100, inspect)
 qt.exec()
 print(json.dumps(result))
 """
-        for scenario in ("docked", "floating", "folders_closed", "files_closed", "input_closed", "preview_closed", "audio_closed"):
+        for scenario in ("docked", "floating", "folders_closed", "files_closed", "input_closed", "preview_closed", "audio_closed", "performance_closed"):
             for shutdown in ("close", "restart"):
                 with self.subTest(scenario=scenario, shutdown=shutdown):
                     with tempfile.TemporaryDirectory() as directory:

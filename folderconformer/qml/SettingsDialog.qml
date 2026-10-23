@@ -73,6 +73,8 @@ ApplicationWindow {
                         model: dialog.controller.themes.map(name => name === "" ? qsTr("System default") : name)
                         currentIndex: dialog.controller.themes.indexOf(dialog.controller.theme)
                         Accessible.name: qsTr("Theme")
+                        ToolTip.visible: hovered || activeFocus
+                        ToolTip.text: qsTr("Theme changes apply after restarting the app.")
                         onActivated: dialog.controller.theme = dialog.controller.themes[currentIndex]
                     }
                     Button {
@@ -81,10 +83,6 @@ ApplicationWindow {
                         enabled: !dialog.controller.running && !dialog.controller.updates.busy
                         onClicked: dialog.controller.restart()
                     }
-                }
-                Label {
-                    Layout.columnSpan: 2
-                    text: qsTr("Theme changes apply after restarting the app.")
                 }
             }
         }

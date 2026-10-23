@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QGuiApplication
 from static_ffmpeg.run import get_platform_dir
 
+from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS
 from folderconformer.pipeline import RunControl, check_rule, conform, empty_directories, image_files, is_landscape, video_files
 
 
@@ -26,6 +27,22 @@ FOLDER_FILES = ("video/", "photo/",
 
 
 class PipelineTests(unittest.TestCase):
+    def test_create_empty_file_in_root_and_preserve_existing_content(self):
+        rules = [{"id": "create_empty_file", "enabled": True}]
+        self.run_rules([{"id": "create_empty_file", "enabled": False}])
+        self.assertFalse((self.folder / ".forceGallery").exists())
+        self.assertEqual(check_rule(self.folder, "create_empty_file", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+        self.run_rules(rules)
+        marker = self.folder / ".forceGallery"
+        self.assertEqual(marker.read_bytes(), b"")
+        self.assertEqual(check_rule(self.folder, "create_empty_file", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+        marker.write_text("existing")
+        self.run_rules(rules)
+        self.assertEqual(marker.read_text(), "existing")
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, rules, "Wide", FFPROBE, *FOLDER_FILES, empty_file_name="custom.marker")
+        self.assertEqual((self.folder / "custom.marker").read_bytes(), b"")
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -39,9 +56,14 @@ class PipelineTests(unittest.TestCase):
         return path
 
     def run_rules(self, rules, enumerate_conflicts=False):
-        with contextlib.redirect_stdout(io.StringIO()):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES,
                     enumerate_conflicts=enumerate_conflicts)
+        identifiers = "|".join(RULE_IDENTIFIERS[rule["id"]] for rule in rules if rule["enabled"])
+        for line in output.getvalue().splitlines():
+            if not line.startswith("Completed: "):
+                self.assertRegex(line, rf"^(?:\[\d+/\d+\] )?\[(?:{identifiers})\] ")
 
     def test_flatten_and_non_media_rules_follow_configured_folders_and_order(self):
         for media, flatten, cleanup, extension in (
@@ -362,8 +384,8 @@ class PipelineTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             conform(self.folder, rules, "Landscape-FULL", FFPROBE, *FOLDER_FILES)
         lines = output.getvalue().splitlines()
-        self.assertIn("[1/1] Renamed folder: Images \u2192 photo", lines)
-        self.assertIn("[1/1] Renamed folder: Videos \u2192 video", lines)
+        self.assertIn("[1/1] [F8] Renamed folder: Images \u2192 photo", lines)
+        self.assertIn("[1/1] [N2] Renamed folder: Videos \u2192 video", lines)
         self.assertTrue((self.folder / "jpg").is_dir())
         self.assertTrue((self.folder / "mp4").is_dir())
         self.assertEqual([line for line in lines if line.startswith("Completed:")], [
@@ -803,7 +825,7 @@ class PipelineTests(unittest.TestCase):
         folder.mkdir()
         (folder / "é.txt").write_text("preserved")
         result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]'],
+                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS)],
                                 check=True, capture_output=True, encoding="utf-8",
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
@@ -817,7 +839,7 @@ class PipelineTests(unittest.TestCase):
                 (folder / "txt/note.txt").write_text("original")
                 (folder / "note.txt").write_text("incoming")
                 arguments = [sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]']
+                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS)]
                 if enumerate_conflicts:
                     arguments.append("--enumerate-conflicts")
                 result = subprocess.run(arguments, check=True, capture_output=True, encoding="utf-8")

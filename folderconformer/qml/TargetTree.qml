@@ -47,7 +47,7 @@ Pane {
             boundsBehavior: Flickable.StopAtBounds
             activeFocusOnTab: true
             editTriggers: TableView.NoEditTriggers
-            Accessible.name: qsTr("Target folder preview")
+            Accessible.name: qsTr("Conformant Folder")
             ScrollBar.vertical: ScrollBar { objectName: "targetTreeScrollBar" }
             delegate: TreeViewDelegate {
                 implicitWidth: tree.width
