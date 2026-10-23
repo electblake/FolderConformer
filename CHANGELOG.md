@@ -12,11 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
 - Added a virtual Qt tree above the rules list showing configured image, video, and Data destinations, landscape subfolders, and sample filenames for configured extensions.
 - Made the target preview update live when folder names, extensions, or enabled rules change, including root extension groups for files without an enabled destination-moving rule.
+- Added configured image and video sample filenames inside landscape preview folders.
+- Added persistent application logging with worker output, tracebacks, process exit details, and Qt messages.
 
 ### Changed
 
 - Moved Copy Output below the activity log.
 - Changed landscape checks to probe only the first item in the configured landscape destination; missing or empty destinations report BAD.
+- Made loose-file, image, video, data, and empty-directory checks stop at the first item that determines BAD without building complete file lists.
+- Gave the target preview its own scrollable area, collapsed all levels by default, and added Collapse all and Open all controls.
+- Kept application log entries across repeated runs.
+
+### Fixed
+
+- Kept the rules list in place when expanding the preview and adjusted the window minimum height to keep controls accessible with larger text.
 
 ## [0.8.0] - 2026-10-22
 

@@ -1,5 +1,6 @@
 import codecs
 import json
+import logging
 import math
 import os
 import re
@@ -8,9 +9,9 @@ import subprocess
 from pathlib import Path
 
 import qt_themes
-from platformdirs import user_config_path
+from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -19,9 +20,18 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout,
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
 
+class ActivityLogHandler(logging.Handler):
+    def __init__(self, output):
+        super().__init__()
+        self.output = output
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+
+    def emit(self, record):
+        self.output.emit(self.format(record) + "\n")
+
+
 class Controller(QObject):
     configurationChanged = Signal()
-    targetTreeRulesChanged = Signal()
     checkStatusesChanged = Signal()
     runningChanged = Signal()
     runStateChanged = Signal()
@@ -34,6 +44,12 @@ class Controller(QObject):
 
     def __init__(self, folder=None):
         super().__init__()
+        self.log_handler = ActivityLogHandler(self.output)
+        logger = logging.getLogger("folderconformer")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(self.log_handler)
+        handler = self.log_handler
+        self.destroyed.connect(lambda: logger.removeHandler(handler))
         self.restart_requested = False
         self._check_statuses = {}
         self._updates = Updates(self)
@@ -70,7 +86,6 @@ class Controller(QObject):
         if not any(rule["id"] == "data_extensions" for rule in self._rules):
             self._rules.append({"id": "data_extensions", "enabled": True})
         self._target_tree = QStandardItemModel(self)
-        self._preview_enabled = set()
         self.configurationChanged.connect(self.update_target_tree)
         self.update_target_tree()
         if folder is not None:
@@ -103,11 +118,12 @@ class Controller(QObject):
             ("data", self._data_folder, self._data_extensions, "data_extensions", "", ""),
         ):
             children = []
+            extensions = dict.fromkeys(value.strip().lstrip(".").lower()
+                                       for value in configured.split(";") if value.strip())
             if landscape_rule in enabled:
-                children.append(("landscape", self._landscape_folder, []))
+                children.append(("landscape", self._landscape_folder,
+                                 [(f"file.{extension}", f"file.{extension}", []) for extension in extensions]))
             if move_rule in enabled:
-                extensions = dict.fromkeys(value.strip().lstrip(".").lower()
-                                           for value in configured.split(";") if value.strip())
                 for extension in extensions:
                     children.append((f"file.{extension}", f"file.{extension}", []))
                     if extension in grouped_extensions:
@@ -119,9 +135,6 @@ class Controller(QObject):
                 roots.append((f"extension.{extension}", f"{extension}/",
                               [(f"file.{extension}", f"file.{extension}", [])]))
         self.sync_target_items(self._target_tree.invisibleRootItem(), roots)
-        if enabled != self._preview_enabled:
-            self._preview_enabled = enabled
-            self.targetTreeRulesChanged.emit()
 
     def sync_target_items(self, parent, entries):
         keys = {key for key, name, children in entries}
@@ -414,7 +427,9 @@ class Controller(QObject):
         self.timer = QElapsedTimer()
         self.timer.start()
         self.process.setProgram(str(Path(sys.executable).with_name("python.exe")))
-        self.process.setArguments(["-I", "-m", "folderconformer", *arguments])
+        self.process.setArguments(["-I", "-u", "-X", "faulthandler", "-m", "folderconformer", *arguments])
+        logging.getLogger(__name__).info("Starting %s: %s", kind,
+                                         subprocess.list2cmdline([self.process.program(), *self.process.arguments()]))
         self.process.start()
 
     @Slot()
@@ -425,6 +440,7 @@ class Controller(QObject):
         self.pending = lines.pop()
         for line in lines:
             if self._kind in ("check", "checks") and line.startswith("Check: "):
+                logging.getLogger("folderconformer.worker").info(line.rstrip("\r"))
                 _, rule_id, status = line.split()
                 self._check_statuses[rule_id] = status
                 self.checkStatusesChanged.emit()
@@ -439,7 +455,7 @@ class Controller(QObject):
                 elif self._run_state != "cancelling":
                     self.process.write(b"continue\n")
                 continue
-            self.output.emit(line + "\n")
+            logging.getLogger("folderconformer.worker").info(line.rstrip("\r"))
             if line.startswith("Completed: "):
                 self.completionSummary.emit(line.removeprefix("Completed: ").rstrip("\r"))
             match = re.match(r"^\[(\d+)/(\d+)\] ", line)
@@ -449,14 +465,24 @@ class Controller(QObject):
                 self.progress.emit(current, total, seconds)
 
     def process_error(self, error):
-        self.output.emit(self.process.errorString())
+        self.read_output()
+        logging.getLogger(__name__).error("%s process error %s: %s; command: %s", self._kind,
+                                          error.name, self.process.errorString(),
+                                          subprocess.list2cmdline([self.process.program(), *self.process.arguments()]))
         if self._kind == "check" and error == QProcess.ProcessError.FailedToStart:
             self._check_statuses[self._check_rule_id] = "ERR"
             self.checkStatusesChanged.emit()
 
     def finished(self, code, _status):
         self.read_output()
-        self.output.emit(self.pending + self.decoder.decode(b"", final=True))
+        tail = self.pending + self.decoder.decode(b"", final=True)
+        if tail:
+            logging.getLogger("folderconformer.worker").info(tail)
+        self.pending = ""
+        logging.getLogger(__name__).log(
+            logging.ERROR if code != 0 or _status == QProcess.ExitStatus.CrashExit else logging.INFO,
+            "%s process finished: exit_code=%s (0x%08X), exit_status=%s", self._kind, code,
+            code & 0xFFFFFFFF, _status.name)
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
         elif self._kind in ("check", "checks"):
@@ -481,7 +507,8 @@ class MainWindow(QMainWindow):
         quick_window.windowTitleChanged.connect(self.setWindowTitle)
         self.resize(1100, 720)
         container = QWidget.createWindowContainer(quick_window, self)
-        container.setMinimumSize(640, 560)
+        container.setMinimumSize(640, quick_window.minimumHeight())
+        quick_window.minimumHeightChanged.connect(container.setMinimumHeight)
         container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCentralWidget(container)
         self.folders_dock = QDockWidget(self.tr("Folders"), self)
@@ -614,7 +641,22 @@ def main():
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
                 control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[11:])
         return 2 if control is not None and control.stopped else 0
+    log_directory = user_log_path(APP_NAME, appauthor=False)
+    log_directory.mkdir(parents=True, exist_ok=True)
+    log_file = logging.FileHandler(log_directory / "FolderConformer.log", encoding="utf-8")
+    log_file.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger = logging.getLogger("folderconformer")
+    logger.addHandler(log_file)
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
+
+    def qt_message(message_type, context, message):
+        level = {QtMsgType.QtDebugMsg: logging.DEBUG, QtMsgType.QtInfoMsg: logging.INFO,
+                 QtMsgType.QtWarningMsg: logging.WARNING, QtMsgType.QtCriticalMsg: logging.ERROR,
+                 QtMsgType.QtFatalMsg: logging.CRITICAL}[message_type]
+        logging.getLogger("folderconformer.qt").log(level, "%s (%s:%s, %s)", message,
+                                                   context.file, context.line, context.function)
+
+    previous_qt_handler = qInstallMessageHandler(qt_message)
     if controller.theme:
         app.setStyle("Fusion")
         QQuickStyle.setStyle("Fusion")
@@ -635,7 +677,11 @@ def main():
                 QQmlProperty.write(window, f"palette.{group.name.lower()}.{name}", palette.color(group, role))
     host = MainWindow(controller, engine.rootObjects()[0])
     host.show()
+    logger.info("%s %s started; log file: %s", APP_NAME, APP_VERSION, log_file.baseFilename)
     result = app.exec()
+    qInstallMessageHandler(previous_qt_handler)
+    logger.removeHandler(log_file)
+    log_file.close()
     window = engine.rootObjects()[0]
     if window.property("pending_installer") is not None:
         os.startfile(window.property("pending_installer"))

@@ -16,7 +16,7 @@ ApplicationWindow {
     width: 820
     height: 720
     minimumWidth: 640
-    minimumHeight: 560
+    minimumHeight: Math.max(560, conformerScreen.implicitHeight + menuBar.height)
     visible: true
     title: qsTr("FolderConformer %1").arg(Qt.application.version)
     onClosing: function(close) {

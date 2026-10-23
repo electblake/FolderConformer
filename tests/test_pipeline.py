@@ -49,6 +49,124 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
         self.assertEqual(list(self.folder.iterdir()), [])
 
+    def test_file_checks_stop_after_first_matching_root_entry(self):
+        witness = self.folder / "witness.txt"
+        witness.write_text("content")
+        with os.scandir(self.folder) as entries:
+            entry = next(entries)
+
+        def first_only():
+            yield entry
+            self.fail("Check continued after finding a matching file")
+
+        for rule_id in ("extension", "video_extensions", "photo_extensions", "data_extensions"):
+            with self.subTest(rule=rule_id), patch("folderconformer.pipeline.os.scandir") as scan:
+                scan.return_value = contextlib.nullcontext(first_only())
+                self.assertEqual(check_rule(self.folder, rule_id, "video", "photo", "txt", "txt",
+                                            "Data", "txt", FFPROBE, "Wide"), "BAD")
+                scan.assert_called_once_with(self.folder)
+
+    def test_file_checks_stop_inside_first_matching_container(self):
+        real_scan = os.scandir
+        for rule_id, destination in (("video_extensions", "video"), ("photo_extensions", "photo"),
+                                     ("data_extensions", "Data")):
+            for in_destination in (False, True):
+                with self.subTest(rule=rule_id, in_destination=in_destination):
+                    root = self.folder / f"{rule_id}-{in_destination}"
+                    container = root / destination / "txt" if in_destination else root / "txt"
+                    container.mkdir(parents=True)
+                    (container / "witness.txt").write_text("content")
+
+                    @contextlib.contextmanager
+                    def scan(path):
+                        with real_scan(path) as entries:
+                            entry = next(entries)
+
+                        def first_only():
+                            yield entry
+                            self.fail("Check continued after finding a matching container file")
+
+                        yield first_only()
+
+                    with patch("folderconformer.pipeline.os.scandir", side_effect=scan):
+                        self.assertEqual(check_rule(root, rule_id, "video", "photo", "txt", "txt",
+                                                    "Data", "txt", FFPROBE, "Wide"), "BAD")
+
+    def test_file_checks_do_not_scan_entries_without_configured_extensions(self):
+        def unexpected_entries():
+            self.fail("No configured extensions means there can be no matching files")
+            yield
+
+        for rule_id in ("video_extensions", "photo_extensions", "data_extensions"):
+            with self.subTest(rule=rule_id), patch("folderconformer.pipeline.os.scandir") as scan:
+                scan.return_value = contextlib.nullcontext(unexpected_entries())
+                self.assertEqual(check_rule(self.folder, rule_id, "video", "photo", " ; ", " ; ",
+                                            "Data", " ; ", FFPROBE, "Wide"), "OK")
+
+    def test_empty_directory_check_stops_before_remaining_siblings(self):
+        empty = self.folder / "empty"
+        empty.mkdir()
+        with os.scandir(self.folder) as entries:
+            entry = next(entries)
+
+        def first_only():
+            yield entry
+            self.fail("Check continued after finding an empty directory")
+
+        with patch("folderconformer.pipeline.os.scandir") as scan:
+            scan.side_effect = [contextlib.nullcontext(first_only()), contextlib.nullcontext(iter(()))]
+            self.assertEqual(check_rule(self.folder, "remove_empty_dirs", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+            self.assertEqual(scan.call_count, 2)
+
+    def test_empty_directory_check_keeps_nested_and_root_semantics(self):
+        self.assertEqual(check_rule(self.folder, "remove_empty_dirs", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+        leaf = self.folder / "parent" / "nested"
+        leaf.mkdir(parents=True)
+        self.assertEqual(check_rule(self.folder, "remove_empty_dirs", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+        (leaf / "file.txt").write_text("content")
+        self.assertEqual(check_rule(self.folder, "remove_empty_dirs", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+
+    def test_rename_checks_stop_without_scanning_remaining_entries(self):
+        for rule_id, alias, destination in (("rename_images", "images", "photo"),
+                                           ("rename_videos", "videos", "video")):
+            with self.subTest(rule=rule_id):
+                root = self.folder / rule_id
+                root.mkdir()
+
+                def unexpected_entries():
+                    self.fail("Missing destination already determines BAD")
+                    yield
+
+                with patch("folderconformer.pipeline.os.scandir", return_value=contextlib.nullcontext(unexpected_entries())):
+                    self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+                (root / alias).mkdir()
+                with os.scandir(root) as entries:
+                    entry = next(entries)
+                (root / destination).mkdir()
+
+                def first_only():
+                    yield entry
+                    self.fail("Rename check continued after finding an alias")
+
+                with patch("folderconformer.pipeline.os.scandir", return_value=contextlib.nullcontext(first_only())):
+                    self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+
+    def test_file_checks_preserve_container_extension_and_depth_rules(self):
+        for rule_id, destination in (("video_extensions", "video"), ("photo_extensions", "photo"),
+                                     ("data_extensions", "Data")):
+            with self.subTest(rule=rule_id):
+                root = self.folder / rule_id
+                container = root / destination / "txt"
+                (container / "nested").mkdir(parents=True)
+                (container / "nested" / "deep.txt").write_text("ignored")
+                (root / destination / "already.txt").write_text("already in destination")
+                self.assertEqual(check_rule(root, rule_id, "video", "photo", "txt", "txt",
+                                            "Data", "txt", FFPROBE, "Wide"), "OK")
+                (container / "other.bin").write_text("other extension")
+                expected = "OK" if rule_id == "data_extensions" else "BAD"
+                self.assertEqual(check_rule(root, rule_id, "video", "photo", "txt", "txt",
+                                            "Data", "txt", FFPROBE, "Wide"), expected)
+
     def test_landscape_checks_only_probe_first_destination_item(self):
         for rule_id, directory in (("landscape", "video"), ("landscape_images", "photo")):
             with self.subTest(rule=rule_id):

@@ -11,8 +11,10 @@ Pane {
     property string completionSummary: ""
     property int processed: 0
     property int total: 0
+    implicitHeight: contentLayout.Layout.minimumHeight + topPadding + bottomPadding
 
     ColumnLayout {
+        id: contentLayout
         anchors.fill: parent
         spacing: 12
 
@@ -22,6 +24,10 @@ Pane {
             controller: screen.controller
             enabled: !screen.controller.running
         }
+        TargetTree {
+            Layout.fillWidth: true
+            controller: screen.controller
+        }
         ScrollView {
             id: settingsScroll
             objectName: "settingsScroll"
@@ -29,28 +35,20 @@ Pane {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: 800
+            Layout.minimumHeight: rulesPanel.topPadding + rulesPanel.bottomPadding + rulesPanel.font.pixelSize * 3
             contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
             clip: true
-            ColumnLayout {
+            RulesPanel {
+                id: rulesPanel
                 width: settingsScroll.contentWidth
-                spacing: 12
-                TargetTree {
-                    Layout.fillWidth: true
-                    controller: screen.controller
-                }
-                RulesPanel {
-                    id: rulesPanel
-                    Layout.fillWidth: true
-                    controller: screen.controller
-                    enabled: !screen.controller.running
-                    onRunOnceRequested: function(index) {
-                        log.clear()
-                        screen.completionSummary = ""
-                        screen.processed = 0
-                        screen.total = 0
-                        screen.status = qsTr("Processing…")
-                        screen.controller.start(index)
-                    }
+                controller: screen.controller
+                enabled: !screen.controller.running
+                onRunOnceRequested: function(index) {
+                    screen.completionSummary = ""
+                    screen.processed = 0
+                    screen.total = 0
+                    screen.status = qsTr("Processing…")
+                    screen.controller.start(index)
                 }
             }
         }
@@ -68,7 +66,6 @@ Pane {
                         && (!screen.controller.rules.some(rule => (rule.id === "landscape" || rule.id === "landscape_images") && rule.enabled)
                             || screen.controller.landscapeFolder.length > 0)
                     onClicked: {
-                        log.clear()
                         screen.completionSummary = ""
                         screen.processed = 0
                         screen.total = 0
@@ -139,9 +136,11 @@ Pane {
             Layout.minimumHeight: 80
             TextArea {
                 id: log
+                objectName: "applicationLog"
+                textFormat: TextEdit.PlainText
                 readOnly: true
                 wrapMode: TextEdit.Wrap
-                Accessible.name: qsTr("Processing log")
+                Accessible.name: qsTr("Application log")
             }
         }
         Button {

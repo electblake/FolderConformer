@@ -120,7 +120,8 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
                landscape_folder: str):
     if rule_id == "extension":
-        bad = any(path.is_file() for path in Path(folder).iterdir())
+        with os.scandir(folder) as entries:
+            bad = any(entry.is_file() for entry in entries)
     elif rule_id in ("rename_images", "rename_videos"):
         names = ("image", "images") if rule_id == "rename_images" else ("video", "videos")
         destination = image_folder if rule_id == "rename_images" else video_folder
@@ -128,14 +129,47 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         with os.scandir(folder) as entries:
             bad = not target.is_dir() or any(entry.is_dir(follow_symlinks=False) and entry.name.lower() in names
                                              and str(Path(entry.path)) != str(target) for entry in entries)
-    elif rule_id == "video_extensions":
-        bad = bool(video_files(Path(folder), video_folder, video_extensions))
-    elif rule_id == "photo_extensions":
-        bad = bool(image_files(Path(folder), image_folder, image_extensions))
-    elif rule_id == "data_extensions":
-        bad = bool(data_files(Path(folder), data_folder, data_extensions))
+    elif rule_id in ("video_extensions", "photo_extensions", "data_extensions"):
+        directory, extensions = {
+            "video_extensions": (video_folder, video_extensions),
+            "photo_extensions": (image_folder, image_extensions),
+            "data_extensions": (data_folder, data_extensions),
+        }[rule_id]
+        suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
+        destination = Path(folder) / directory
+        with os.scandir(folder) as entries:
+            if not suffixes:
+                return "OK"
+            for entry in entries:
+                path = Path(entry.path)
+                if entry.is_file() and path.suffix.lstrip(".").lower() in suffixes \
+                        and (rule_id != "data_extensions" or path.parent != destination):
+                    return "BAD"
+                if entry.is_dir(follow_symlinks=False) and path != destination and entry.name.lower() in suffixes:
+                    with os.scandir(path) as children:
+                        if any(child.is_file() and (rule_id != "data_extensions"
+                               or Path(child.name).suffix.lstrip(".").lower() in suffixes) for child in children):
+                            return "BAD"
+                if entry.is_dir(follow_symlinks=False) and path == destination:
+                    with os.scandir(path) as children:
+                        for child in children:
+                            if child.is_dir(follow_symlinks=False) and child.name.lower() in suffixes:
+                                with os.scandir(child.path) as files:
+                                    if any(file.is_file() and (rule_id != "data_extensions"
+                                           or Path(file.name).suffix.lstrip(".").lower() in suffixes) for file in files):
+                                        return "BAD"
+        return "OK"
     elif rule_id == "remove_empty_dirs":
-        bad = any(empty_directories(Path(folder)))
+        pending = [Path(folder)]
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        with os.scandir(entry.path) as children:
+                            if not any(True for _ in children):
+                                return "BAD"
+                        pending.append(Path(entry.path))
+        return "OK"
     elif rule_id in ("landscape", "landscape_images"):
         directory = video_folder if rule_id == "landscape" else image_folder
         target = Path(folder) / directory / landscape_folder

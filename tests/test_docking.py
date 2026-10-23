@@ -70,16 +70,22 @@ class DockingTests(unittest.TestCase):
 
     def test_target_tree_shows_virtual_folders_and_updates_from_dock(self):
         tree = self.quick.findChild(QObject, "targetTree")
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "openTargetTree"), "clicked")
+        QTest.qWait(50)
         model = self.controller.targetTree
         self.assertEqual(model.rowCount(), 3)
         self.assertEqual([model.item(row).text() for row in range(3)], ["photo/", "video/", "Data/"])
         self.assertEqual([model.item(row).rowCount() for row in range(3)], [6, 20, 3])
         self.assertEqual([model.item(2).child(row).text() for row in range(3)], ["file.csv", "file.db", "file.txt"])
         self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Landscape-FULL"] * 2)
-        self.assertEqual(tree.property("rows"), 32)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 56)
         preview = self.quick.findChild(QObject, "targetTreePanel")
         rules = self.quick.findChild(QObject, "rulesPanel")
-        self.assertLessEqual(preview.y() + preview.height(), rules.y())
+        self.assertLessEqual(preview.mapToScene(QPointF(0, preview.height())).y(),
+                             rules.mapToScene(QPointF(0, 0)).y())
         QMetaObject.invokeMethod(tree, "collapse", Q_ARG(int, 0))
         self.host.activateWindow()
         for name, value in (("imageFolder", "Pictures/"), ("videoFolder", "Clips/"),
@@ -90,12 +96,14 @@ class DockingTests(unittest.TestCase):
             QTest.keyClicks(field, value)
         APP.processEvents()
         self.assertIs(self.controller.targetTree, model)
-        self.assertEqual(tree.property("rows"), 26)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 45)
         self.assertEqual([model.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
         self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Wide media"] * 2)
         QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 0))
         QTest.qWait(50)
-        self.assertEqual(tree.property("rows"), 32)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 56)
         restored_controller = Controller()
         restored = restored_controller.targetTree
         self.assertEqual([restored.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
@@ -106,6 +114,8 @@ class DockingTests(unittest.TestCase):
         self.controller.imageExtensions = ""
         self.controller.videoExtensions = ""
         tree = self.quick.findChild(QObject, "targetTree")
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "openTargetTree"), "clicked")
+        QTest.qWait(50)
         data = self.controller.targetTree.item(2)
         field = self.host.file_fields["dataExtensions"]
         self.host.activateWindow()
@@ -116,6 +126,7 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(data.rowCount(), 4)
         self.assertEqual([data.child(row).text() for row in range(4)],
                          ["file.txt", "file.csv", "file.json", "file.xml"])
+        QMetaObject.invokeMethod(tree, "forceLayout")
         self.assertEqual(tree.property("rows"), 9)
         self.assertAlmostEqual(tree.height(), tree.property("implicitHeight"), delta=1)
         self.assertFalse(data.child(0).isEditable())
@@ -125,14 +136,18 @@ class DockingTests(unittest.TestCase):
         QTest.qWait(50)
         self.assertEqual(data.rowCount(), 1)
         self.assertEqual(data.child(0).text(), "file.csv")
+        QMetaObject.invokeMethod(tree, "forceLayout")
         self.assertEqual(tree.property("rows"), 6)
         self.controller.dataExtensions = ""
         QTest.qWait(50)
         self.assertEqual(data.rowCount(), 0)
+        QMetaObject.invokeMethod(tree, "forceLayout")
         self.assertEqual(tree.property("rows"), 5)
 
-    def test_media_previews_track_extensions_only_under_media_roots(self):
+    def test_media_previews_track_extensions_in_roots_and_landscape_folders(self):
         tree = self.quick.findChild(QObject, "targetTree")
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "openTargetTree"), "clicked")
+        QTest.qWait(50)
         model = self.controller.targetTree
         self.host.activateWindow()
         for root_row, name, value, expected in (
@@ -150,16 +165,21 @@ class DockingTests(unittest.TestCase):
                 self.assertEqual([media.child(row).text() for row in range(1, media.rowCount())], expected)
                 self.assertIs(media.child(0), landscape)
                 self.assertEqual(landscape.text(), "Landscape-FULL")
-                self.assertEqual(landscape.rowCount(), 0)
+                self.assertEqual([landscape.child(row).text() for row in range(landscape.rowCount())], expected)
+                self.assertTrue(all(not landscape.child(row).isEditable() for row in range(landscape.rowCount())))
                 self.assertTrue(all(not media.child(row).isEditable() for row in range(media.rowCount())))
                 restored = Controller()
                 self.assertEqual(restored.targetTree.item(root_row).child(3).text(), expected[2])
+                self.assertEqual(restored.targetTree.item(root_row).child(0).child(2).text(), expected[2])
                 setattr(self.controller, name, "")
                 self.assertEqual(media.rowCount(), 1)
                 self.assertIs(media.child(0), landscape)
+                self.assertEqual(landscape.rowCount(), 0)
                 setattr(self.controller, name, value)
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "openTargetTree"), "clicked")
         QTest.qWait(50)
-        self.assertEqual(tree.property("rows"), 14)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 20)
         self.assertEqual([model.item(2).child(row).text() for row in range(3)],
                          ["file.csv", "file.db", "file.txt"])
 
@@ -189,19 +209,82 @@ class DockingTests(unittest.TestCase):
             with self.subTest(enabled=enabled):
                 for index, rule in enumerate(self.controller.rules):
                     self.controller.setEnabled(index, rule["id"] in enabled)
+                QMetaObject.invokeMethod(self.quick.findChild(QObject, "openTargetTree"), "clicked")
                 QTest.qWait(50)
                 model = self.controller.targetTree
                 actual = [(model.item(row).text(), [model.item(row).child(child).text()
                            for child in range(model.item(row).rowCount())]) for row in range(model.rowCount())]
                 self.assertEqual(actual, expected)
-                self.assertEqual(tree.property("rows"), sum(1 + len(children) for name, children in expected))
+                QMetaObject.invokeMethod(tree, "forceLayout")
+                self.assertEqual(tree.property("rows"), sum(1 + len(children) for name, children in expected)
+                                 + len(enabled.intersection({"landscape", "landscape_images"})))
                 for row in range(model.rowCount()):
-                    self.assertTrue(all(model.item(row).child(child).rowCount() == 0
-                                        for child in range(model.item(row).rowCount())))
+                    for child in range(model.item(row).rowCount()):
+                        item = model.item(row).child(child)
+                        if item.text() == "Landscape-FULL":
+                            self.assertEqual(item.rowCount(), 1)
+                            self.assertEqual(item.child(0).text(), "file.jpg" if model.item(row).text() == "photo/" else "file.mp4")
+                        else:
+                            self.assertEqual(item.rowCount(), 0)
         restored = Controller()
         self.assertEqual(restored.targetTree.rowCount(), 3)
         self.controller.moveRule(0, 1)
         self.assertEqual(self.controller.targetTree.rowCount(), 3)
+
+    def test_preview_scrolls_independently_and_defaults_collapsed(self):
+        tree = self.quick.findChild(QObject, "targetTree")
+        preview = self.quick.findChild(QObject, "targetTreePanel")
+        rules = self.quick.findChild(QObject, "rulesPanel")
+        rules_scroll = self.quick.findChild(QObject, "settingsScroll").property("contentItem")
+        open_all = self.quick.findChild(QObject, "openTargetTree")
+        collapse_all = self.quick.findChild(QObject, "collapseTargetTree")
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        preview_height = preview.height()
+        rules_y = rules.mapToScene(QPointF(0, 0)).y()
+        self.assertLess(rules_y, self.quick.height())
+        self.assertGreater(open_all.mapToScene(QPointF(0, 0)).x(), preview.width() / 2)
+        self.assertLessEqual(open_all.mapToScene(QPointF(0, open_all.height())).y(),
+                             tree.mapToScene(QPointF(0, 0)).y())
+        QMetaObject.invokeMethod(open_all, "clicked")
+        QTest.qWait(50)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 56)
+        self.assertGreater(tree.property("contentHeight"), tree.height())
+        self.assertTrue(self.quick.findChild(QObject, "targetTreeScrollBar").property("visible"))
+        tree.setProperty("contentY", 120)
+        QTest.qWait(50)
+        self.assertGreater(tree.property("contentY"), 0)
+        self.assertEqual(rules_scroll.property("contentY"), 0)
+        self.assertEqual(preview.height(), preview_height)
+        self.assertEqual(rules.mapToScene(QPointF(0, 0)).y(), rules_y)
+        QMetaObject.invokeMethod(collapse_all, "clicked")
+        QTest.qWait(50)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        self.controller.setEnabled(0, False)
+        self.controller.imageExtensions = "png;jpg"
+        QTest.qWait(50)
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        self.assertEqual(preview.height(), preview_height)
+
+    def test_landscape_preview_children_start_collapsed(self):
+        tree = self.quick.findChild(QObject, "targetTree")
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 0))
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 9)
+        QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 1))
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 14)
+        QMetaObject.invokeMethod(self.quick.findChild(QObject, "collapseTargetTree"), "clicked")
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 3)
+        QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 0))
+        QMetaObject.invokeMethod(tree, "forceLayout")
+        self.assertEqual(tree.property("rows"), 9)
 
     def test_folder_edits_persist_update_rules_and_keep_keyboard_order(self):
         values = {"landscapeFolder": "Wide media é", "videoFolder": "Clips/", "imageFolder": "Pictures/", "dataFolder": "Records/"}
@@ -358,6 +441,12 @@ class DockingTests(unittest.TestCase):
         scroll = self.host.folders_dock.widget()
         self.assertTrue(scroll.widgetResizable())
         self.assertGreaterEqual(self.quick.width(), 640)
+        tree = self.quick.findChild(QObject, "targetTree")
+        preview = self.quick.findChild(QObject, "targetTreePanel")
+        rules = self.quick.findChild(QObject, "rulesPanel")
+        self.assertGreaterEqual(tree.height(), tree.property("implicitHeight") - 1)
+        self.assertLessEqual(preview.mapToScene(QPointF(0, preview.height())).y(),
+                             rules.mapToScene(QPointF(0, 0)).y())
         pending = [self.quick.contentItem()]
         controls = {}
         while pending:

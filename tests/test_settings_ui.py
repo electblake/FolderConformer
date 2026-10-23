@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import logging
 import subprocess
 import sys
 import tempfile
@@ -73,23 +74,69 @@ class SettingsUiTests(unittest.TestCase):
         self.assertTrue(controller.process.waitForFinished(10000))
         self.assertEqual(controller.process.exitCode(), 0)
         self.assertEqual(controller.checkStatuses, {"remove_empty_dirs": "OK", "extension": "BAD"})
-        self.assertEqual(json.loads(controller.process.arguments()[5]), ["remove_empty_dirs", "extension"])
+        self.assertEqual(json.loads(controller.process.arguments()[8]), ["remove_empty_dirs", "extension"])
         self.assertEqual(list(folder.iterdir()), [folder / "note.txt"])
         self.assertEqual((folder / "note.txt").read_text(), "content")
         self.assertTrue(check_all.property("enabled"))
         controller.output.emit("Activity output")
         APP.processEvents()
-        log = next(item for item in window.findChildren(QQuickItem)
-                   if item.property("text") == "Activity output")
+        log = window.findChild(QQuickItem, "applicationLog")
+        self.assertIn("Check: extension BAD", log.property("text"))
         copy = window.findChild(QQuickItem, "copyOutput")
         self.assertGreaterEqual(copy.mapToScene(QPointF(0, 0)).y(),
                                 log.mapToScene(QPointF(0, log.height())).y())
         QMetaObject.invokeMethod(copy, "clicked")
-        self.assertEqual(APP.clipboard().text(), "Activity output")
+        self.assertEqual(APP.clipboard().text(), log.property("text"))
         for index in range(len(controller.rules)):
             controller.setEnabled(index, False)
         self.assertFalse(check_all.property("enabled"))
         window.close()
+
+    def test_worker_logs_include_traceback_and_exit_details(self):
+        controller = Controller()
+        output = []
+        controller.output.connect(output.append)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(controller.log_handler.formatter)
+        logger = logging.getLogger("folderconformer")
+        logger.addHandler(handler)
+        self.addCleanup(logger.removeHandler, handler)
+        logging.getLogger("folderconformer.updates").warning("Application warning")
+        with patch.object(controller.process, "start"):
+            controller._launch("conform", [])
+        controller.process.setArguments(["-u", "-c",
+            "import sys; print('worker output'); sys.stderr.write('stderr detail\\n'); "
+            "raise RuntimeError('actual failure')"])
+        controller.process.start()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        text = "".join(output)
+        self.assertEqual(text, stream.getvalue())
+        for expected in ("WARNING folderconformer.updates: Application warning", "Starting conform:",
+                         "worker output", "stderr detail", "Traceback (most recent call last):",
+                         "RuntimeError: actual failure", "exit_code=1 (0x00000001), exit_status=NormalExit"):
+            self.assertIn(expected, text)
+        self.assertTrue(all(record.endswith("\n") for record in output))
+
+    def test_repeated_crashes_preserve_unterminated_output(self):
+        controller = Controller()
+        output = []
+        controller.output.connect(output.append)
+        for _ in range(2):
+            with patch.object(controller.process, "start"):
+                controller._launch("conform", [])
+            controller.process.setArguments(["-u", "-c",
+                "import sys,time; sys.stderr.write('unterminated detail'); sys.stderr.flush(); time.sleep(30)"])
+            controller.process.start()
+            self.assertTrue(controller.process.waitForReadyRead(10000))
+            controller.process.kill()
+            self.assertTrue(controller.process.waitForFinished(10000))
+        text = "".join(output)
+        self.assertEqual(text.count("folderconformer.worker: unterminated detail"), 2)
+        self.assertEqual(text.count("exit_status=CrashExit"), 2)
+        self.assertIn("process error Crashed:", text)
+        self.assertTrue(all(record.endswith("\n") for record in output))
+        self.assertNotIn("Process crashedProcess crashed", text)
 
     def test_checks_follow_rule_identity_and_clear_when_input_changes(self):
         folder = Path(self.temporary.name) / "media"
