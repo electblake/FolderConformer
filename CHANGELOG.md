@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
+
+### Changed
+
+- Moved Copy Output below the activity log.
+
 ## [0.8.0] - 2026-10-22
 
 ### Added

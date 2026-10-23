@@ -69,6 +69,13 @@ Pane {
                     }
                 }
                 Button {
+                    objectName: "checkAll"
+                    text: qsTr("Check all")
+                    enabled: !screen.controller.running && screen.controller.folder.length > 0
+                        && screen.controller.rules.some(rule => rule.enabled)
+                    onClicked: screen.controller.checkAll()
+                }
+                Button {
                     objectName: "pauseProcessing"
                     text: screen.controller.runState === "paused" || screen.controller.runState === "pausing"
                         ? qsTr("Resume") : qsTr("Pause")
@@ -100,14 +107,6 @@ Pane {
                     enabled: screen.controller.folder.length > 0
                     onClicked: screen.controller.openOutputFolder()
                 }
-                Button {
-                    objectName: "copyOutput"
-                    text: qsTr("Copy Output")
-                    onClicked: {
-                        log.selectAll()
-                        log.copy()
-                    }
-                }
             }
         }
         ProgressBar {
@@ -135,6 +134,15 @@ Pane {
                 readOnly: true
                 wrapMode: TextEdit.Wrap
                 Accessible.name: qsTr("Processing log")
+            }
+        }
+        Button {
+            objectName: "copyOutput"
+            Layout.alignment: Qt.AlignRight
+            text: qsTr("Copy Output")
+            onClicked: {
+                log.selectAll()
+                log.copy()
             }
         }
     }

@@ -49,6 +49,48 @@ class SettingsUiTests(unittest.TestCase):
                 return item
             pending.extend(item.childItems())
 
+    def test_check_all_runs_enabled_checks_without_changing_files(self):
+        folder = Path(self.temporary.name) / "media"
+        folder.mkdir()
+        (folder / "note.txt").write_text("content")
+        controller = Controller(str(folder))
+        controller._rules = [{"id": "remove_empty_dirs", "enabled": True},
+                             {"id": "landscape", "enabled": False},
+                             {"id": "extension", "enabled": True}]
+        engine = QQmlApplicationEngine()
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        APP.processEvents()
+        check_all = window.findChild(QObject, "checkAll")
+        execute = window.findChild(QObject, "executeRules")
+        self.assertEqual(check_all.parentItem(), execute.parentItem())
+        self.assertGreater(check_all.x(), execute.x())
+        QMetaObject.invokeMethod(check_all, "clicked")
+        self.assertTrue(controller.checking)
+        self.assertFalse(check_all.property("enabled"))
+        self.assertFalse(window.findChild(QObject, "pauseProcessing").property("enabled"))
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertEqual(controller.checkStatuses, {"remove_empty_dirs": "OK", "extension": "BAD"})
+        self.assertEqual(json.loads(controller.process.arguments()[5]), ["remove_empty_dirs", "extension"])
+        self.assertEqual(list(folder.iterdir()), [folder / "note.txt"])
+        self.assertEqual((folder / "note.txt").read_text(), "content")
+        self.assertTrue(check_all.property("enabled"))
+        controller.output.emit("Activity output")
+        APP.processEvents()
+        log = next(item for item in window.findChildren(QQuickItem)
+                   if item.property("text") == "Activity output")
+        copy = window.findChild(QQuickItem, "copyOutput")
+        self.assertGreaterEqual(copy.mapToScene(QPointF(0, 0)).y(),
+                                log.mapToScene(QPointF(0, log.height())).y())
+        QMetaObject.invokeMethod(copy, "clicked")
+        self.assertEqual(APP.clipboard().text(), "Activity output")
+        for index in range(len(controller.rules)):
+            controller.setEnabled(index, False)
+        self.assertFalse(check_all.property("enabled"))
+        window.close()
+
     def test_checks_follow_rule_identity_and_clear_when_input_changes(self):
         folder = Path(self.temporary.name) / "media"
         (folder / "video/mp4").mkdir(parents=True)

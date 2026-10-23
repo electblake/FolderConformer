@@ -229,7 +229,7 @@ class DockingTests(unittest.TestCase):
             item = pending.pop()
             controls[item.objectName()] = item
             pending.extend(item.childItems())
-        for name in ("executeRules", "pauseProcessing", "stopProcessing", "cancelProcessing",
+        for name in ("executeRules", "checkAll", "pauseProcessing", "stopProcessing", "cancelProcessing",
                      "openOutputFolder", "copyOutput"):
             button = controls[name]
             position = button.mapToScene(QPointF(0, 0))

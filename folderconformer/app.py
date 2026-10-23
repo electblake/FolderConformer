@@ -249,9 +249,21 @@ class Controller(QObject):
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions])
 
+    @Slot()
+    def checkAll(self):
+        rule_ids = [rule["id"] for rule in self._rules if rule["enabled"]]
+        for rule_id in rule_ids:
+            self._check_statuses[rule_id] = "-"
+        self.checkStatusesChanged.emit()
+        self._run_state = ""
+        self.runStateChanged.emit()
+        self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
+                                self._image_folder, self._video_extensions, self._image_extensions,
+                                self._data_folder, self._data_extensions])
+
     @Property(bool, notify=runningChanged)
     def checking(self):
-        return self.running and self._kind == "check"
+        return self.running and self._kind in ("check", "checks")
 
     @Property(bool, notify=runningChanged)
     def running(self):
@@ -351,7 +363,7 @@ class Controller(QObject):
         lines = self.pending.split("\n")
         self.pending = lines.pop()
         for line in lines:
-            if self._kind == "check" and line.startswith("Check: "):
+            if self._kind in ("check", "checks") and line.startswith("Check: "):
                 _, rule_id, status = line.split()
                 self._check_statuses[rule_id] = status
                 self.checkStatusesChanged.emit()
@@ -386,8 +398,8 @@ class Controller(QObject):
         self.output.emit(self.pending + self.decoder.decode(b"", final=True))
         if self._kind == "explorer":
             self.explorerCompleted.emit(code)
-        elif self._kind == "check":
-            if code != 0 or _status == QProcess.ExitStatus.CrashExit:
+        elif self._kind in ("check", "checks"):
+            if self._kind == "check" and (code != 0 or _status == QProcess.ExitStatus.CrashExit):
                 self._check_statuses[self._check_rule_id] = "ERR"
                 self.checkStatusesChanged.emit()
             self._run_state = ""
@@ -521,13 +533,15 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
         from folderconformer.integrations import install
         return install()
-    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+    if len(sys.argv) > 1 and sys.argv[1] in ("--check", "--check-all"):
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import check_rule
-        status = check_rule(Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
-                            sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe")
-        print(f"Check: {sys.argv[3]} {status}", flush=True)
+        rule_ids = json.loads(sys.argv[3]) if sys.argv[1] == "--check-all" else [sys.argv[3]]
+        for rule_id in rule_ids:
+            status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
+                                sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe")
+            print(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         sys.stdout.reconfigure(encoding="utf-8")
