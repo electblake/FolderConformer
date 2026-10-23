@@ -31,18 +31,26 @@ Pane {
             Layout.preferredHeight: 800
             contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
             clip: true
-            RulesPanel {
-                id: rulesPanel
+            ColumnLayout {
                 width: settingsScroll.contentWidth
-                controller: screen.controller
-                enabled: !screen.controller.running
-                onRunOnceRequested: function(index) {
-                    log.clear()
-                    screen.completionSummary = ""
-                    screen.processed = 0
-                    screen.total = 0
-                    screen.status = qsTr("Processing…")
-                    screen.controller.start(index)
+                spacing: 12
+                TargetTree {
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                }
+                RulesPanel {
+                    id: rulesPanel
+                    Layout.fillWidth: true
+                    controller: screen.controller
+                    enabled: !screen.controller.running
+                    onRunOnceRequested: function(index) {
+                        log.clear()
+                        screen.completionSummary = ""
+                        screen.processed = 0
+                        screen.total = 0
+                        screen.status = qsTr("Processing…")
+                        screen.controller.start(index)
+                    }
                 }
             }
         }

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from PySide6.QtCore import QEvent, QMetaObject, QObject, QPointF, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, Qt, QUrl
 from PySide6.QtGui import QKeyEvent, QValidator
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
@@ -67,6 +67,141 @@ class DockingTests(unittest.TestCase):
         self.assertFalse(dock.isVisible())
         QMetaObject.invokeMethod(menu, "triggered")
         self.assertTrue(dock.isVisible())
+
+    def test_target_tree_shows_virtual_folders_and_updates_from_dock(self):
+        tree = self.quick.findChild(QObject, "targetTree")
+        model = self.controller.targetTree
+        self.assertEqual(model.rowCount(), 3)
+        self.assertEqual([model.item(row).text() for row in range(3)], ["photo/", "video/", "Data/"])
+        self.assertEqual([model.item(row).rowCount() for row in range(3)], [6, 20, 3])
+        self.assertEqual([model.item(2).child(row).text() for row in range(3)], ["file.csv", "file.db", "file.txt"])
+        self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Landscape-FULL"] * 2)
+        self.assertEqual(tree.property("rows"), 32)
+        preview = self.quick.findChild(QObject, "targetTreePanel")
+        rules = self.quick.findChild(QObject, "rulesPanel")
+        self.assertLessEqual(preview.y() + preview.height(), rules.y())
+        QMetaObject.invokeMethod(tree, "collapse", Q_ARG(int, 0))
+        self.host.activateWindow()
+        for name, value in (("imageFolder", "Pictures/"), ("videoFolder", "Clips/"),
+                            ("dataFolder", "Records/"), ("landscapeFolder", "Wide media")):
+            field = self.host.folder_fields[name]
+            field.setFocus()
+            QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+            QTest.keyClicks(field, value)
+        APP.processEvents()
+        self.assertIs(self.controller.targetTree, model)
+        self.assertEqual(tree.property("rows"), 26)
+        self.assertEqual([model.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
+        self.assertEqual([model.item(row).child(0).text() for row in (0, 1)], ["Wide media"] * 2)
+        QMetaObject.invokeMethod(tree, "expand", Q_ARG(int, 0))
+        QTest.qWait(50)
+        self.assertEqual(tree.property("rows"), 32)
+        restored_controller = Controller()
+        restored = restored_controller.targetTree
+        self.assertEqual([restored.item(row).text() for row in range(3)], ["Pictures/", "Clips/", "Records/"])
+        self.assertFalse(model.item(0).isEditable())
+        self.assertFalse(model.item(0).child(0).isEditable())
+
+    def test_data_preview_tracks_extension_edits_and_empty_list(self):
+        self.controller.imageExtensions = ""
+        self.controller.videoExtensions = ""
+        tree = self.quick.findChild(QObject, "targetTree")
+        data = self.controller.targetTree.item(2)
+        field = self.host.file_fields["dataExtensions"]
+        self.host.activateWindow()
+        field.setFocus()
+        QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClicks(field, " .TXT;csv;TXT;json;xml; ;")
+        QTest.qWait(50)
+        self.assertEqual(data.rowCount(), 4)
+        self.assertEqual([data.child(row).text() for row in range(4)],
+                         ["file.txt", "file.csv", "file.json", "file.xml"])
+        self.assertEqual(tree.property("rows"), 9)
+        self.assertAlmostEqual(tree.height(), tree.property("implicitHeight"), delta=1)
+        self.assertFalse(data.child(0).isEditable())
+        restored = Controller()
+        self.assertEqual(restored.targetTree.item(2).child(3).text(), "file.xml")
+        self.controller.dataExtensions = "csv"
+        QTest.qWait(50)
+        self.assertEqual(data.rowCount(), 1)
+        self.assertEqual(data.child(0).text(), "file.csv")
+        self.assertEqual(tree.property("rows"), 6)
+        self.controller.dataExtensions = ""
+        QTest.qWait(50)
+        self.assertEqual(data.rowCount(), 0)
+        self.assertEqual(tree.property("rows"), 5)
+
+    def test_media_previews_track_extensions_only_under_media_roots(self):
+        tree = self.quick.findChild(QObject, "targetTree")
+        model = self.controller.targetTree
+        self.host.activateWindow()
+        for root_row, name, value, expected in (
+            (0, "imageExtensions", " .PNG;jpg;PNG;webp; ;", ["file.png", "file.jpg", "file.webp"]),
+            (1, "videoExtensions", " .MOV;mp4;MOV;mkv; ;", ["file.mov", "file.mp4", "file.mkv"]),
+        ):
+            with self.subTest(setting=name):
+                media = model.item(root_row)
+                landscape = media.child(0)
+                field = self.host.file_fields[name]
+                field.setFocus()
+                QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+                QTest.keyClicks(field, value)
+                QTest.qWait(50)
+                self.assertEqual([media.child(row).text() for row in range(1, media.rowCount())], expected)
+                self.assertIs(media.child(0), landscape)
+                self.assertEqual(landscape.text(), "Landscape-FULL")
+                self.assertEqual(landscape.rowCount(), 0)
+                self.assertTrue(all(not media.child(row).isEditable() for row in range(media.rowCount())))
+                restored = Controller()
+                self.assertEqual(restored.targetTree.item(root_row).child(3).text(), expected[2])
+                setattr(self.controller, name, "")
+                self.assertEqual(media.rowCount(), 1)
+                self.assertIs(media.child(0), landscape)
+                setattr(self.controller, name, value)
+        QTest.qWait(50)
+        self.assertEqual(tree.property("rows"), 14)
+        self.assertEqual([model.item(2).child(row).text() for row in range(3)],
+                         ["file.csv", "file.db", "file.txt"])
+
+    def test_preview_follows_enabled_rule_destinations(self):
+        self.controller.imageExtensions = "jpg"
+        self.controller.videoExtensions = "mp4"
+        self.controller.dataExtensions = "txt"
+        tree = self.quick.findChild(QObject, "targetTree")
+        cases = (
+            (set(), []),
+            ({"remove_empty_dirs"}, []),
+            ({"rename_images"}, [("photo/", [])]),
+            ({"rename_videos"}, [("video/", [])]),
+            ({"landscape_images"}, [("photo/", ["Landscape-FULL"])]),
+            ({"landscape"}, [("video/", ["Landscape-FULL"])]),
+            ({"photo_extensions"}, [("photo/", ["file.jpg"])]),
+            ({"video_extensions"}, [("video/", ["file.mp4"])]),
+            ({"data_extensions"}, [("Data/", ["file.txt"])]),
+            ({"extension"}, [("jpg/", ["file.jpg"]), ("mp4/", ["file.mp4"]), ("txt/", ["file.txt"])]),
+            ({"extension", "photo_extensions", "landscape_images", "data_extensions"},
+             [("photo/", ["Landscape-FULL", "file.jpg"]), ("Data/", ["file.txt"]), ("mp4/", ["file.mp4"])]),
+            ({"photo_extensions", "video_extensions", "data_extensions", "landscape", "landscape_images"},
+             [("photo/", ["Landscape-FULL", "file.jpg"]), ("video/", ["Landscape-FULL", "file.mp4"]),
+              ("Data/", ["file.txt"])]),
+        )
+        for enabled, expected in cases:
+            with self.subTest(enabled=enabled):
+                for index, rule in enumerate(self.controller.rules):
+                    self.controller.setEnabled(index, rule["id"] in enabled)
+                QTest.qWait(50)
+                model = self.controller.targetTree
+                actual = [(model.item(row).text(), [model.item(row).child(child).text()
+                           for child in range(model.item(row).rowCount())]) for row in range(model.rowCount())]
+                self.assertEqual(actual, expected)
+                self.assertEqual(tree.property("rows"), sum(1 + len(children) for name, children in expected))
+                for row in range(model.rowCount()):
+                    self.assertTrue(all(model.item(row).child(child).rowCount() == 0
+                                        for child in range(model.item(row).rowCount())))
+        restored = Controller()
+        self.assertEqual(restored.targetTree.rowCount(), 3)
+        self.controller.moveRule(0, 1)
+        self.assertEqual(self.controller.targetTree.rowCount(), 3)
 
     def test_folder_edits_persist_update_rules_and_keep_keyboard_order(self):
         values = {"landscapeFolder": "Wide media é", "videoFolder": "Clips/", "imageFolder": "Pictures/", "dataFolder": "Records/"}

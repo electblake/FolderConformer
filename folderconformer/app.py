@@ -11,7 +11,7 @@ import qt_themes
 from platformdirs import user_config_path
 from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout, QLabel, QLineEdit, QMainWindow, QScrollArea, QWidget
@@ -21,6 +21,7 @@ from folderconformer.updates import APP_NAME, APP_VERSION, Updates
 
 class Controller(QObject):
     configurationChanged = Signal()
+    targetTreeRulesChanged = Signal()
     checkStatusesChanged = Signal()
     runningChanged = Signal()
     runStateChanged = Signal()
@@ -68,6 +69,10 @@ class Controller(QObject):
             self._rules.append({"id": "landscape_images", "enabled": True})
         if not any(rule["id"] == "data_extensions" for rule in self._rules):
             self._rules.append({"id": "data_extensions", "enabled": True})
+        self._target_tree = QStandardItemModel(self)
+        self._preview_enabled = set()
+        self.configurationChanged.connect(self.update_target_tree)
+        self.update_target_tree()
         if folder is not None:
             self.folder = folder
         self.process = QProcess(self)
@@ -79,6 +84,61 @@ class Controller(QObject):
         self.process.stateChanged.connect(self.runningChanged)
         self.process.finished.connect(self.finished)
         self.process.errorOccurred.connect(self.process_error)
+
+    @Property(QObject, constant=True)
+    def targetTree(self):
+        return self._target_tree
+
+    def update_target_tree(self):
+        enabled = {rule["id"] for rule in self._rules if rule["enabled"]}
+        roots = []
+        grouped_extensions = dict.fromkeys(
+            value.strip().lstrip(".").lower()
+            for configured in (self._image_extensions, self._video_extensions, self._data_extensions)
+            for value in configured.split(";") if value.strip()
+        )
+        for key, name, configured, move_rule, rename_rule, landscape_rule in (
+            ("images", self._image_folder, self._image_extensions, "photo_extensions", "rename_images", "landscape_images"),
+            ("videos", self._video_folder, self._video_extensions, "video_extensions", "rename_videos", "landscape"),
+            ("data", self._data_folder, self._data_extensions, "data_extensions", "", ""),
+        ):
+            children = []
+            if landscape_rule in enabled:
+                children.append(("landscape", self._landscape_folder, []))
+            if move_rule in enabled:
+                extensions = dict.fromkeys(value.strip().lstrip(".").lower()
+                                           for value in configured.split(";") if value.strip())
+                for extension in extensions:
+                    children.append((f"file.{extension}", f"file.{extension}", []))
+                    if extension in grouped_extensions:
+                        del grouped_extensions[extension]
+            if enabled.intersection((move_rule, rename_rule, landscape_rule)):
+                roots.append((key, name, children))
+        if "extension" in enabled:
+            for extension in grouped_extensions:
+                roots.append((f"extension.{extension}", f"{extension}/",
+                              [(f"file.{extension}", f"file.{extension}", [])]))
+        self.sync_target_items(self._target_tree.invisibleRootItem(), roots)
+        if enabled != self._preview_enabled:
+            self._preview_enabled = enabled
+            self.targetTreeRulesChanged.emit()
+
+    def sync_target_items(self, parent, entries):
+        keys = {key for key, name, children in entries}
+        for row in range(parent.rowCount() - 1, -1, -1):
+            if parent.child(row).data(Qt.ItemDataRole.UserRole) not in keys:
+                parent.removeRow(row)
+        for row, (key, name, children) in enumerate(entries):
+            if row == parent.rowCount() or parent.child(row).data(Qt.ItemDataRole.UserRole) != key:
+                item = QStandardItem(name)
+                item.setData(key, Qt.ItemDataRole.UserRole)
+                item.setEditable(False)
+                parent.insertRow(row, [item])
+            item = parent.child(row)
+            item.setText(name)
+            self.sync_target_items(item, children)
+        if parent.rowCount() > len(entries):
+            parent.removeRows(len(entries), parent.rowCount() - len(entries))
 
     @Property(QObject, constant=True)
     def updates(self):

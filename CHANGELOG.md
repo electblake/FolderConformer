@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
+- Added a virtual Qt tree above the rules list showing configured image, video, and Data destinations, landscape subfolders, and sample filenames for configured extensions.
+- Made the target preview update live when folder names, extensions, or enabled rules change, including root extension groups for files without an enabled destination-moving rule.
 
 ### Changed
 
