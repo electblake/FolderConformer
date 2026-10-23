@@ -1,4 +1,5 @@
 import codecs
+import csv
 import json
 import logging
 import math
@@ -11,16 +12,16 @@ from pathlib import Path
 import qt_themes
 from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
-from folderconformer.music_model import MUSIC_THRESHOLD
+from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MODEL_PATH, MUSIC_THRESHOLD
 
 
 class StandardIconProvider(QQuickImageProvider):
@@ -88,9 +89,8 @@ class Controller(QObject):
         self._enumerate_conflicts = self.settings.value("enumerateConflicts", False, type=bool)
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
         self._music_video_folder = self.settings.value("musicVideoFolder", "with-music", type=str)
-        self._music_threshold = self.settings.value("audio/musicThreshold", MUSIC_THRESHOLD, type=float)
-        self._singing_threshold = self.settings.value("audio/singingThreshold", MUSIC_THRESHOLD, type=float)
-        self._humming_threshold = self.settings.value("audio/hummingThreshold", MUSIC_THRESHOLD, type=float)
+        self._audio_classes = json.loads(self.settings.value(
+            "audio/classes", json.dumps(DEFAULT_AUDIO_CLASSES), type=str))
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
@@ -197,9 +197,7 @@ class Controller(QObject):
         self.settings.setValue("enumerateConflicts", self._enumerate_conflicts)
         self.settings.setValue("landscapeFolder", self._landscape_folder)
         self.settings.setValue("musicVideoFolder", self._music_video_folder)
-        self.settings.setValue("audio/singingThreshold", self._singing_threshold)
-        self.settings.setValue("audio/hummingThreshold", self._humming_threshold)
-        self.settings.setValue("audio/musicThreshold", self._music_threshold)
+        self.settings.setValue("audio/classes", json.dumps(self._audio_classes))
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
         self.settings.setValue("dataFolder", self._data_folder)
@@ -273,35 +271,13 @@ class Controller(QObject):
         self.checkStatusesChanged.emit()
         self.save()
 
-    @Property(float, notify=configurationChanged)
-    def musicThreshold(self):
-        return self._music_threshold
+    @Property("QVariantList", notify=configurationChanged)
+    def audioClasses(self):
+        return self._audio_classes
 
-    @musicThreshold.setter
-    def musicThreshold(self, value):
-        self._music_threshold = value
-        self._check_statuses = {}
-        self.checkStatusesChanged.emit()
-        self.save()
-
-    @Property(float, notify=configurationChanged)
-    def singingThreshold(self):
-        return self._singing_threshold
-
-    @singingThreshold.setter
-    def singingThreshold(self, value):
-        self._singing_threshold = value
-        self._check_statuses = {}
-        self.checkStatusesChanged.emit()
-        self.save()
-
-    @Property(float, notify=configurationChanged)
-    def hummingThreshold(self):
-        return self._humming_threshold
-
-    @hummingThreshold.setter
-    def hummingThreshold(self, value):
-        self._humming_threshold = value
+    @audioClasses.setter
+    def audioClasses(self, value):
+        self._audio_classes = value
         self._check_statuses = {}
         self.checkStatusesChanged.emit()
         self.save()
@@ -403,8 +379,7 @@ class Controller(QObject):
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
-                               self._landscape_folder, self._music_video_folder, str(self._music_threshold),
-                                str(self._singing_threshold), str(self._humming_threshold)])
+                               self._landscape_folder, self._music_video_folder, json.dumps(self._audio_classes)])
 
     @Slot()
     def checkAll(self):
@@ -417,8 +392,7 @@ class Controller(QObject):
         self._launch("checks", ["--check-all", self._folder, json.dumps(rule_ids), self._video_folder,
                                 self._image_folder, self._video_extensions, self._image_extensions,
                                 self._data_folder, self._data_extensions, self._landscape_folder,
-                                self._music_video_folder, str(self._music_threshold),
-                                str(self._singing_threshold), str(self._humming_threshold)])
+                                self._music_video_folder, json.dumps(self._audio_classes)])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -501,8 +475,7 @@ class Controller(QObject):
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      self._data_folder, self._data_extensions, self._music_video_folder,
-                     str(self._music_threshold), str(self._singing_threshold),
-                     str(self._humming_threshold), "--controlled"]
+                     json.dumps(self._audio_classes), "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -698,35 +671,34 @@ class MainWindow(QMainWindow):
         self.audio_dock = QDockWidget(self.tr("Audio"), self)
         self.audio_dock.setObjectName("audioDock")
         audio_contents = QWidget()
-        audio_form = QFormLayout(audio_contents)
-        audio_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        self.music_threshold = QDoubleSpinBox()
-        self.music_threshold.setObjectName("musicThreshold")
-        self.music_threshold.setAccessibleName(self.tr("Minimum music score"))
-        self.music_threshold.setRange(0.001, 1.0)
-        self.music_threshold.setDecimals(3)
-        self.music_threshold.setSingleStep(0.01)
-        self.music_threshold.setValue(controller.musicThreshold)
-        self.music_threshold.valueChanged.connect(lambda value: setattr(controller, "musicThreshold", value))
-        audio_form.addRow(self.tr("Minimum music score"), self.music_threshold)
-        self.singing_threshold = QDoubleSpinBox()
-        self.singing_threshold.setObjectName("singingThreshold")
-        self.singing_threshold.setAccessibleName(self.tr("Minimum singing score"))
-        self.singing_threshold.setRange(0.001, 1.0)
-        self.singing_threshold.setDecimals(3)
-        self.singing_threshold.setSingleStep(0.01)
-        self.singing_threshold.setValue(controller.singingThreshold)
-        self.singing_threshold.valueChanged.connect(lambda value: setattr(controller, "singingThreshold", value))
-        audio_form.addRow(self.tr("Minimum singing score"), self.singing_threshold)
-        self.humming_threshold = QDoubleSpinBox()
-        self.humming_threshold.setObjectName("hummingThreshold")
-        self.humming_threshold.setAccessibleName(self.tr("Minimum humming score"))
-        self.humming_threshold.setRange(0.001, 1.0)
-        self.humming_threshold.setDecimals(3)
-        self.humming_threshold.setSingleStep(0.01)
-        self.humming_threshold.setValue(controller.hummingThreshold)
-        self.humming_threshold.valueChanged.connect(lambda value: setattr(controller, "hummingThreshold", value))
-        audio_form.addRow(self.tr("Minimum humming score"), self.humming_threshold)
+        audio_layout = QVBoxLayout(audio_contents)
+        with (MODEL_PATH / "assets/yamnet_class_map.csv").open(encoding="utf-8") as source:
+            self.audio_labels = {row["mid"]: row["display_name"] for row in csv.DictReader(source)}
+        self.audio_input = QLineEdit()
+        self.audio_input.setObjectName("audioClassInput")
+        self.audio_input.setAccessibleName(self.tr("Audio class"))
+        self.audio_input.setPlaceholderText(self.tr("Audio class"))
+        self.audio_completer = QCompleter(self)
+        self.audio_completion_model = QStringListModel(sorted(self.audio_labels.values()), self.audio_completer)
+        self.audio_completer.setModel(self.audio_completion_model)
+        self.audio_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.audio_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.audio_input.setCompleter(self.audio_completer)
+        self.audio_add = QPushButton(self.tr("Add"))
+        self.audio_add.setObjectName("addAudioClass")
+        self.audio_add.clicked.connect(self.add_audio_class)
+        self.audio_input.returnPressed.connect(self.audio_add.click)
+        self.audio_input.textChanged.connect(self.sync_audio_add)
+        audio_entry = QHBoxLayout()
+        audio_entry.addWidget(self.audio_input)
+        audio_entry.addWidget(self.audio_add)
+        audio_layout.addLayout(audio_entry)
+        self.audio_rows = QFormLayout()
+        self.audio_rows.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        audio_layout.addLayout(self.audio_rows)
+        audio_layout.addStretch()
+        self.audio_thresholds = {}
+        self.sync_audio()
         audio_scroll = QScrollArea()
         audio_scroll.setWidgetResizable(True)
         audio_scroll.setWidget(audio_contents)
@@ -774,10 +746,58 @@ class MainWindow(QMainWindow):
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.audio_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
 
+    def sync_audio_add(self):
+        selected = {mid for mid, threshold in self.controller.audioClasses}
+        self.audio_add.setEnabled(any(label.casefold() == self.audio_input.text().casefold()
+                                      for mid, label in self.audio_labels.items() if mid not in selected))
+
+    def add_audio_class(self):
+        mid = next(mid for mid, label in self.audio_labels.items()
+                   if label.casefold() == self.audio_input.text().casefold())
+        self.controller.audioClasses = [*self.controller.audioClasses, [mid, MUSIC_THRESHOLD]]
+        self.audio_input.clear()
+        self.audio_input.setFocus()
+
+    def remove_audio_class(self, mid):
+        self.controller.audioClasses = [entry for entry in self.controller.audioClasses if entry[0] != mid]
+
+    def set_audio_threshold(self, mid, value):
+        self.controller.audioClasses = [[key, value if key == mid else threshold]
+                                        for key, threshold in self.controller.audioClasses]
+
     def sync_audio(self):
-        self.singing_threshold.setValue(self.controller.singingThreshold)
-        self.humming_threshold.setValue(self.controller.hummingThreshold)
-        self.music_threshold.setValue(self.controller.musicThreshold)
+        selected = self.controller.audioClasses
+        if list(self.audio_thresholds) != [mid for mid, threshold in selected]:
+            while self.audio_rows.rowCount():
+                self.audio_rows.removeRow(0)
+            self.audio_thresholds = {}
+            for mid, threshold in selected:
+                label = self.audio_labels[mid]
+                spin = QDoubleSpinBox()
+                spin.setObjectName(f"audioThreshold:{mid}")
+                spin.setAccessibleName(self.tr("Minimum score: ") + label)
+                spin.setRange(0.001, 1.0)
+                spin.setDecimals(3)
+                spin.setSingleStep(0.01)
+                spin.setValue(threshold)
+                spin.valueChanged.connect(lambda value, key=mid: self.set_audio_threshold(key, value))
+                remove = QPushButton(self.tr("Remove"))
+                remove.setObjectName(f"removeAudioClass:{mid}")
+                remove.setAccessibleName(self.tr("Remove: ") + label)
+                remove.clicked.connect(lambda checked=False, key=mid: self.remove_audio_class(key))
+                row = QHBoxLayout()
+                row.addWidget(spin)
+                row.addWidget(remove)
+                self.audio_rows.addRow(label + self.tr(" minimum score"), row)
+                self.audio_thresholds[mid] = spin
+            self.audio_completion_model.setStringList(
+                sorted(label for mid, label in self.audio_labels.items() if mid not in self.audio_thresholds))
+        for mid, threshold in selected:
+            spin = self.audio_thresholds[mid]
+            spin.blockSignals(True)
+            spin.setValue(threshold)
+            spin.blockSignals(False)
+        self.sync_audio_add()
 
     def sync_files(self):
         self.enumerate_conflicts.setChecked(self.controller.enumerateConflicts)
@@ -820,7 +840,7 @@ def main():
         for rule_id in rule_ids:
             status = check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
                                 sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
-                                sys.argv[11], float(sys.argv[12]), float(sys.argv[13]), float(sys.argv[14]))
+                                sys.argv[11], json.loads(sys.argv[12]))
             print(f"Check: {rule_id} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
@@ -828,12 +848,11 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[15:] else None
+        control = RunControl() if "--controlled" in sys.argv[13:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[15:],
-                music_folder=sys.argv[11], music_threshold=float(sys.argv[12]),
-                singing_threshold=float(sys.argv[13]), humming_threshold=float(sys.argv[14]))
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[13:],
+                music_folder=sys.argv[11], audio_classes=json.loads(sys.argv[12]))
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)

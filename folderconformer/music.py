@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
-from folderconformer.music_model import MODEL_PATH, MODEL_VERSION, MUSIC_THRESHOLD
+from folderconformer.music_model import MODEL_PATH, MODEL_VERSION, DEFAULT_AUDIO_CLASSES
 
 
 SAMPLE_RATE = 16000
@@ -32,19 +32,19 @@ class MusicEvidence:
 class MusicDetection:
     contains_music: bool
     max_window_score: float
-    thresholds: tuple[float, float, float]
+    thresholds: tuple[float, ...]
     evidence_windows: tuple[MusicEvidence, ...]
     model_version: str = MODEL_VERSION
 
 
 class MusicDetector:
-    def __init__(self, music_threshold=MUSIC_THRESHOLD, singing_threshold=MUSIC_THRESHOLD, humming_threshold=MUSIC_THRESHOLD):
-        self.thresholds = (music_threshold, singing_threshold, humming_threshold)
+    def __init__(self, audio_classes=DEFAULT_AUDIO_CLASSES):
+        self.thresholds = tuple(threshold for mid, threshold in audio_classes)
         self.model = tf.saved_model.load(str(MODEL_PATH))
         with open(self.model.class_map_path().numpy(), encoding="utf-8") as source:
             classes = list(csv.DictReader(source))
         self.columns = [next(int(row["index"]) for row in classes if row["mid"] == mid)
-                        for mid in ("/m/04rlf", "/m/015lz1", "/m/02fxyj")]
+                        for mid, threshold in audio_classes]
         self.labels = [classes[index]["display_name"] for index in self.columns]
 
     def score_frames(self, blocks):
@@ -69,6 +69,8 @@ class MusicDetector:
             yield start, start + len(pending), scores
 
     def classify_video(self, path: Path, ffprobe: Path, control=None):
+        if not self.columns:
+            return MusicDetection(False, 0.0, self.thresholds, ())
         probe = subprocess.run(
             [str(ffprobe), "-v", "error", "-select_streams", "a", "-show_streams", "-of", "json", str(path)],
             check=True, capture_output=True, text=True, encoding="utf-8",

@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Replaced fixed Audio thresholds with autocomplete over the installed model’s 521 classes, Add/Remove controls, and per-class minimum scores persisted in QSettings and applied by Check and Execute.
+
 - Exposed independent minimum scores for Music, Singing, and Humming in Audio, used by Check and Execute.
 
 - Stopped music analysis at the first qualifying batch, terminating the decoder and skipping remaining audio tracks.

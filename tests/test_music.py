@@ -13,7 +13,7 @@ import numpy as np
 from static_ffmpeg.run import get_platform_dir
 
 from folderconformer.music import BLOCK_SAMPLES, FRAME_SAMPLES, HOP_SAMPLES, MusicDetector
-from folderconformer.music_model import MUSIC_THRESHOLD
+from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MUSIC_THRESHOLD
 from folderconformer.pipeline import RunControl, check_rule, conform
 
 
@@ -121,7 +121,7 @@ class MusicTests(unittest.TestCase):
     def test_threshold_equality_stops_at_first_qualifying_batch(self):
         path = self.video("video/music.mp4")
         result = self.classify(path)
-        detector = MusicDetector(*([result.max_window_score] * 3))
+        detector = MusicDetector([(mid, result.max_window_score) for mid, threshold in DEFAULT_AUDIO_CLASSES])
         with contextlib.redirect_stdout(io.StringIO()):
             equal = detector.classify_video(path, FFPROBE)
         self.assertTrue(equal.contains_music)
@@ -148,6 +148,28 @@ class MusicTests(unittest.TestCase):
                 with patch.object(self.detector, "thresholds", tuple(thresholds)):
                     negative = self.classify(path)
                 self.assertFalse(negative.contains_music)
+
+    def test_selected_non_music_class_checks_and_moves_real_speech(self):
+        speech = self.video("video/speech.mp4", "libri1")
+        music = self.video("video/music.mp4")
+        selected = [["/m/09x0r", 0.5]]
+        detector = MusicDetector(selected)
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = detector.classify_video(speech, FFPROBE)
+            self.assertEqual(check_rule(self.root, "music_videos", *FOLDERS, FFPROBE, "Wide",
+                                        audio_classes=selected), "BAD")
+        self.assertTrue(result.contains_music)
+        self.assertEqual({window.label for window in result.evidence_windows}, {"Speech"})
+        self.run_music(audio_classes=selected)
+        self.assertTrue((speech.parent / "with-music" / speech.name).exists())
+        self.assertFalse(speech.exists())
+        self.assertTrue(music.exists())
+
+    def test_empty_selection_matches_nothing(self):
+        speech = self.video("video/speech.mp4", "libri1")
+        self.run_music(audio_classes=[])
+        self.assertTrue(speech.exists())
+        self.assertFalse((speech.parent / "with-music").exists())
 
     def test_positive_stops_decoder_and_skips_remaining_audio_tracks(self):
         path = self.root / "video/early.mkv"

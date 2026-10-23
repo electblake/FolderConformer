@@ -10,7 +10,7 @@ from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, Qt, QUr
 from PySide6.QtGui import QKeyEvent, QValidator
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDockWidget, QLineEdit
+from PySide6.QtWidgets import QApplication, QDockWidget, QLineEdit, QPushButton
 
 from folderconformer.app import Controller, MainWindow, StandardIconProvider
 
@@ -165,26 +165,61 @@ class DockingTests(unittest.TestCase):
             text = button.property("contentItem").property("color")
             self.assertGreater(abs(text.lightnessF() - background.lightnessF()), 0.3)
 
+    def test_audio_class_completion_add_remove_and_persistence(self):
+        self.assertEqual(len(self.host.audio_labels), 521)
+        self.assertEqual(set(self.host.audio_thresholds), {"/m/04rlf", "/m/015lz1", "/m/02fxyj"})
+        self.assertFalse(self.host.audio_add.isEnabled())
+        field = self.host.audio_input
+        field.setFocus()
+        QTest.keyClicks(field, "spee")
+        self.host.audio_completer.setCompletionPrefix(field.text())
+        model = self.host.audio_completer.completionModel()
+        labels = [model.index(row, 0).data() for row in range(model.rowCount())]
+        self.assertIn("Speech", labels)
+        self.assertFalse(self.host.audio_add.isEnabled())
+        popup = self.host.audio_completer.popup()
+        index = model.index(labels.index("Speech"), 0)
+        popup.scrollTo(index)
+        QTest.mouseClick(popup.viewport(), Qt.MouseButton.LeftButton, pos=popup.visualRect(index).center())
+        self.assertEqual(field.text(), "Speech")
+        self.host.audio_add.click()
+        self.assertIn("/m/09x0r", self.host.audio_thresholds)
+        self.host.audio_thresholds["/m/09x0r"].setValue(0.7)
+        self.assertEqual(dict(Controller().audioClasses)["/m/09x0r"], 0.7)
+        field.setText("speech")
+        self.assertFalse(self.host.audio_add.isEnabled())
+        self.assertNotIn("Speech", self.host.audio_completion_model.stringList())
+        self.host.findChild(QPushButton, "removeAudioClass:/m/04rlf").click()
+        self.assertNotIn("/m/04rlf", dict(Controller().audioClasses))
+        self.assertIn("Music", self.host.audio_completion_model.stringList())
+        for mid in list(self.host.audio_thresholds):
+            self.host.findChild(QPushButton, f"removeAudioClass:{mid}").click()
+        self.assertEqual(Controller().audioClasses, [])
+        self.assertEqual(len(self.host.audio_completion_model.stringList()), 521)
+        field.setText("music")
+        QTest.keyClick(field, Qt.Key.Key_Return)
+        self.assertEqual(Controller().audioClasses, [["/m/04rlf", 0.504]])
+
     def test_audio_dock_settings_visibility_busy_and_reset(self):
         dock = self.host.audio_dock
         self.assertEqual(dock.objectName(), "audioDock")
         self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
         self.assertGreaterEqual(dock.y(), self.host.files_dock.y() + self.host.files_dock.height())
-        self.host.music_threshold.setValue(0.75)
-        self.host.singing_threshold.setValue(0.85)
-        self.host.humming_threshold.setValue(0.95)
+        self.host.audio_thresholds["/m/04rlf"].setValue(0.75)
+        self.host.audio_thresholds["/m/015lz1"].setValue(0.85)
+        self.host.audio_thresholds["/m/02fxyj"].setValue(0.95)
         self.host.folder_fields["musicVideoFolder"].textEdited.emit("Tunes")
         restored = Controller()
-        self.assertEqual(restored.musicThreshold, 0.75)
-        self.assertEqual(restored.singingThreshold, 0.85)
-        self.assertEqual(restored.hummingThreshold, 0.95)
+        self.assertEqual(dict(restored.audioClasses)["/m/04rlf"], 0.75)
+        self.assertEqual(dict(restored.audioClasses)["/m/015lz1"], 0.85)
+        self.assertEqual(dict(restored.audioClasses)["/m/02fxyj"], 0.95)
         self.assertEqual(restored.musicVideoFolder, "Tunes")
         self.assertEqual(self.controller.targetTree.item(1).child(1).text(), "Tunes")
         self.controller.updates._busy = True
         self.controller.updates.changed.emit()
-        self.assertFalse(self.host.music_threshold.isEnabled())
-        self.assertFalse(self.host.singing_threshold.isEnabled())
-        self.assertFalse(self.host.humming_threshold.isEnabled())
+        self.assertFalse(self.host.audio_thresholds["/m/04rlf"].isEnabled())
+        self.assertFalse(self.host.audio_thresholds["/m/015lz1"].isEnabled())
+        self.assertFalse(self.host.audio_thresholds["/m/02fxyj"].isEnabled())
         self.controller.updates._busy = False
         self.controller.updates.changed.emit()
         dock.setFloating(True)
