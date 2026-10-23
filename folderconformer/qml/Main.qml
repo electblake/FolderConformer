@@ -7,6 +7,7 @@ import QtQuick.Dialogs
 ApplicationWindow {
     id: window
     required property QtObject controller
+    property bool nativeMenus: false
     property var pending_installer: null
     signal quitRequested()
     property bool inputVisible: true
@@ -43,6 +44,8 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
+        visible: !window.nativeMenus
+        height: visible ? implicitHeight : 0
         Menu {
             title: qsTr("&File")
             MenuItem {

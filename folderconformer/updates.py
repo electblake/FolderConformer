@@ -1,5 +1,8 @@
 import json
+import base64
+import os
 import platform
+import subprocess
 from importlib.metadata import version
 from urllib.request import Request, urlopen
 
@@ -14,12 +17,39 @@ GITHUB_API_VERSION = "2022-11-28"
 RELEASES_URL = f"https://github.com/{GITHUB_REPOSITORY}/releases"
 
 
+def install_after_exit(installer):
+    import _winapi
+
+    process = _winapi.GetCurrentProcess()
+    handle = _winapi.DuplicateHandle(process, process, process, 0x00100000, True, 0)
+    # Inherit the exact process handle so exit/PID reuse cannot race the helper.
+    startup = subprocess.STARTUPINFO()
+    startup.lpAttributeList = {"handle_list": [handle]}
+    path = installer.replace("'", "''")
+    command = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$wait = [System.Threading.ManualResetEvent]::new($false); "
+        f"$wait.SafeWaitHandle = [Microsoft.Win32.SafeHandles.SafeWaitHandle]::new([IntPtr]{handle}, $true); "
+        "$null = $wait.WaitOne(); $wait.Dispose(); "
+        f"Start-Process -FilePath '{path}'"
+    )
+    helper = subprocess.Popen(
+        [str(os.path.join(os.environ["SystemRoot"], "System32", "WindowsPowerShell", "v1.0", "powershell.exe")),
+         "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand",
+         base64.b64encode(command.encode("utf-16-le")).decode("ascii")],
+        startupinfo=startup, creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    _winapi.CloseHandle(handle)
+    return helper
+
+
 def version_tuple(value):
     return tuple(int(part) for part in value.split("."))
 
 
 class UpdateWorker(QThread):
     releaseFetched = Signal(str, bool, object)
+    releaseDetails = Signal(str)
     downloadProgress = Signal(object, object)
     downloaded = Signal(str)
 
@@ -49,6 +79,7 @@ class UpdateWorker(QThread):
                 )
                 asset = next(a for a in release["assets"] if a["name"] == name)
             self.releaseFetched.emit(latest, available, asset)
+            self.releaseDetails.emit(f'{release["name"]} · Published {release["published_at"]}')
         else:
             directory = user_cache_path(APP_NAME, appauthor=False) / "updates"
             directory.mkdir(parents=True, exist_ok=True)
@@ -72,6 +103,7 @@ class Updates(QObject):
         self._installer_path = ""
         self._status = ""
         self._versions = f"Installed: {APP_VERSION}"
+        self._release_info = ""
         self._progress = 0
         self._indeterminate = False
         self.asset = None
@@ -105,6 +137,10 @@ class Updates(QObject):
     def progress(self):
         return self._progress
 
+    @Property(str, notify=changed)
+    def releaseInfo(self):
+        return self._release_info
+
     @Property(bool, notify=changed)
     def indeterminate(self):
         return self._indeterminate
@@ -119,6 +155,7 @@ class Updates(QObject):
         self._installer_path = ""
         self.asset = None
         self._versions = f"Installed: {APP_VERSION}"
+        self._release_info = ""
         self._status = "Checking for updates…"
         self._progress = 0
         self._indeterminate = True
@@ -126,9 +163,15 @@ class Updates(QObject):
         self.changed.emit()
         worker = UpdateWorker(parent=self)
         worker.releaseFetched.connect(self.release_fetched)
+        worker.releaseDetails.connect(self.release_details)
         worker.finished.connect(self.worker_finished)
         self.workers.append(worker)
         worker.start()
+
+    @Slot(str)
+    def release_details(self, info):
+        self._release_info = info
+        self.changed.emit()
 
     @Slot(str, bool, object)
     def release_fetched(self, latest, available, asset):

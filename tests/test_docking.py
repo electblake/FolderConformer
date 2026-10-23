@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QEvent, QMetaObject, QObject, QPointF, Qt, QTimer, QUrl
 from PySide6.QtGui import QKeyEvent, QValidator
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDockWidget, QLineEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QDockWidget, QLabel, QLineEdit, QPushButton
 
 from folderconformer.app import Controller, MainWindow, StandardIconProvider
 
@@ -39,6 +39,7 @@ class DockingTests(unittest.TestCase):
         self.controller.updates._busy = False
         self.controller.updates.changed.emit()
         self.host.close()
+        self.host.destroy()
         self.host.deleteLater()
         APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.engine.deleteLater()
@@ -88,6 +89,40 @@ class DockingTests(unittest.TestCase):
         dock.setFloating(True)
         self.host.close()
         self.assertFalse(dock.isVisible())
+
+    def test_native_menus_folder_and_about(self):
+        menus = self.host.menuBar().actions()
+        self.assertEqual([action.text() for action in menus], ["&File", "&View", "&Help"])
+        self.assertTrue(self.host.menuBar().isVisible())
+        self.assertTrue(self.quick.property("nativeMenus"))
+        select = menus[0].menu().actions()[0]
+        select.trigger()
+        APP.processEvents()
+        self.assertTrue(self.quick.property("choosingFolder"))
+        dialog = next(child for child in self.quick.findChildren(QObject)
+                      if child.property("title") == "Select input folder")
+        QMetaObject.invokeMethod(dialog, "reject")
+        self.controller.updates._busy = True
+        self.controller.updates.changed.emit()
+        self.assertFalse(select.isEnabled())
+        self.assertFalse(menus[2].menu().actions()[1].isEnabled())
+        self.controller.updates._busy = False
+        self.controller.updates.changed.emit()
+        seen = []
+
+        def inspect_about():
+            about = self.host.findChild(QDialog, "aboutDialog")
+            seen.append(about.findChild(QLabel, "aboutCredits").text())
+            about.reject()
+
+        for _ in range(2):
+            QTimer.singleShot(0, inspect_about)
+            menus[2].menu().actions()[0].trigger()
+            APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.assertIsNone(self.host.findChild(QDialog, "aboutDialog"))
+        self.assertIn("YAMNet 1", seen[0])
+        self.assertIn("TensorFlow 2.21.0", seen[0])
+        self.assertIn("https://", seen[0])
 
     def test_preview_dock_moves_floats_reopens_and_resets(self):
         dock = self.host.preview_dock
@@ -613,7 +648,7 @@ class DockingTests(unittest.TestCase):
 
     def test_install_update_closes_host_and_floating_dock(self):
         with patch.object(self.controller.updates, "check"):
-            QMetaObject.invokeMethod(self.quick.findChild(QObject, "checkForUpdatesMenu"), "triggered")
+            self.host.menuBar().actions()[2].menu().actions()[1].trigger()
         dialog = self.quick.findChild(QObject, "softwareUpdate")
         self.controller.updates._installer_path = "C:/cache/installer.exe"
         self.host.folders_dock.setFloating(True)
@@ -684,12 +719,19 @@ class DockingTests(unittest.TestCase):
         script = r"""
 import json, sys
 from pathlib import Path
-from PySide6.QtCore import QObject, QTimer, Qt, QUrl
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from folderconformer import app
 qt = QApplication([])
+def cleanup():
+    host.destroy()
+    host.deleteLater()
+    qt.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    engine.deleteLater()
+    qt.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+qt.aboutToQuit.connect(cleanup)
 app.user_config_path = lambda *a, **k: Path(sys.argv[1])
 controller = app.Controller()
 engine = QQmlApplicationEngine()
@@ -747,8 +789,9 @@ print(json.dumps(result))
                             [sys.executable, "-c", script, directory, "save", scenario, shutdown],
                             capture_output=True, text=True, timeout=15)
                         self.assertEqual(saved.returncode, 0, saved.stderr)
-                        restored = subprocess.run(
-                            [sys.executable, "-c", script, directory, "restore", scenario, "close"],
-                            capture_output=True, text=True, timeout=15)
-                        self.assertEqual(restored.returncode, 0, restored.stderr)
-                        self.assertEqual(json.loads(restored.stdout), json.loads(saved.stdout))
+                        for _ in range(2):
+                            restored = subprocess.run(
+                                [sys.executable, "-c", script, directory, "restore", scenario, "close"],
+                                capture_output=True, text=True, timeout=15)
+                            self.assertEqual(restored.returncode, 0, restored.stderr)
+                            self.assertEqual(json.loads(restored.stdout), json.loads(saved.stdout))

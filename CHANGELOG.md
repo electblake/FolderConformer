@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a main-window Qt menu bar with File > Select Folder, the existing Settings and View actions, and Help > About with versioned framework/model credits and license links.
+- Added release names and publication dates to the update dialog alongside installed/latest versions, release checking, the GitHub releases link, and download progress.
 - Added opt-in V1 and I1 rules to recursively flatten the configured video and image folders, with Check, Run Once, saved ordering, and existing name-conflict handling.
 - Added V2 and I2 rules to move direct non-video and non-image files into the input root for subsequent rules, using the configured extension lists.
 
@@ -46,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Delayed update installation until the application process fully exits, using a hidden helper waiting on an inherited Windows process handle.
+- Released closed About dialogs so repeated opening does not retain hidden dialogs.
+- Restored saved geometry after the first native show event to prevent window size and position drift on restart.
+- Released native backing stores while Quick widgets are alive, then destroyed the host and QML engine during shutdown to prevent intermittent floating-preview exit crashes.
 - Included flatten-only media destinations in the target preview.
 - Kept non-media rules from renaming files already at the input root when a media folder is configured as `.`.
 

@@ -7,20 +7,21 @@ import os
 import re
 import sys
 import subprocess
+from importlib.metadata import version
 from pathlib import Path
 
 import qt_themes
 from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QElapsedTimer, QEvent, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
 
-from folderconformer.updates import APP_NAME, APP_VERSION, Updates
+from folderconformer.updates import APP_NAME, APP_VERSION, Updates, install_after_exit
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MODEL_PATH, MUSIC_THRESHOLD
 
 
@@ -567,6 +568,32 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.quick_window = quick_window
+        quick_window.setProperty("nativeMenus", True)
+        self.menuBar().setNativeMenuBar(False)
+        self.menu_actions = []
+        for title, items in (
+            ("&File", ("selectFolderMenu", "settingsMenu", None, "quitMenu")),
+            ("&View", ("inputFolderMenu", "previewMenu", "foldersMenu", "filesMenu", "audioMenu", None, "resetLayoutMenu")),
+            ("&Help", ("aboutMenu", "checkForUpdatesMenu", "installExplorerMenu")),
+        ):
+            menu = self.menuBar().addMenu(self.tr(title))
+            for name in items:
+                if name is None:
+                    menu.addSeparator()
+                elif name == "aboutMenu":
+                    action = menu.addAction(self.tr("&About"))
+                    action.setObjectName(name)
+                    action.triggered.connect(self.show_about)
+                else:
+                    item = quick_window.findChild(QObject, name)
+                    action = menu.addAction(item.property("text"))
+                    action.setObjectName(name)
+                    action.setCheckable(item.property("checkable"))
+                    action.triggered.connect(lambda checked=False, source=item: QMetaObject.invokeMethod(source, "triggered"))
+                    item.checkedChanged.connect(lambda target=action, source=item: target.setChecked(source.property("checked")))
+                    item.enabledChanged.connect(lambda target=action, source=item: target.setEnabled(source.property("enabled")))
+                    self.menu_actions.append((action, item))
+                    action.setChecked(item.property("checked"))
         self.setWindowTitle(quick_window.title())
         quick_window.windowTitleChanged.connect(self.setWindowTitle)
         self.resize(1100, 720)
@@ -716,10 +743,18 @@ class MainWindow(QMainWindow):
         self.sync_enabled()
         self.default_layout = self.saveState()
         quick_window.resetLayoutRequested.connect(lambda: self.restoreState(self.default_layout))
-        if controller.settings.contains("window/geometry"):
-            self.restoreGeometry(controller.settings.value("window/geometry"))
-        if controller.settings.contains("window/state"):
-            self.restoreState(controller.settings.value("window/state"))
+        self.restore_on_show = True
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.restore_on_show:
+            return
+        self.restore_on_show = False
+        # Restore after Windows has established the native frame margins.
+        if self.controller.settings.contains("window/geometry"):
+            self.restoreGeometry(self.controller.settings.value("window/geometry"))
+        if self.controller.settings.contains("window/state"):
+            self.restoreState(self.controller.settings.value("window/state"))
 
     def sync_preview_palette(self):
         for group in ("active", "inactive", "disabled"):
@@ -729,6 +764,30 @@ class MainWindow(QMainWindow):
                          "toolTipText", "accent"):
                 name = f"palette.{group}.{role}"
                 QQmlProperty.write(self.preview.rootObject(), name, QQmlProperty.read(self.quick_window, name))
+
+    def show_about(self):
+        dialog = QDialog(self)
+        dialog.setObjectName("aboutDialog")
+        dialog.setWindowTitle(self.tr("About FolderConformer"))
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f"{APP_NAME} {APP_VERSION}"))
+        credits = QLabel(
+            f'Python {sys.version.split()[0]} · <a href="https://docs.python.org/3/license.html">PSF-2.0</a><br>'
+            f'Qt / PySide6 {version("PySide6")} · <a href="https://doc.qt.io/qtforpython-6/licenses.html">LGPL-3.0 / GPL-3.0</a><br>'
+            f'qt-themes {version("qt-themes")} · <a href="https://github.com/beatreichenbach/qt-themes/blob/main/LICENSE">MIT</a><br>'
+            f'TensorFlow {version("tensorflow")} · <a href="https://github.com/tensorflow/tensorflow/blob/master/LICENSE">Apache-2.0</a><br>'
+            'YAMNet 1 · <a href="https://www.kaggle.com/models/google/yamnet/tensorFlow2/yamnet/1">Apache-2.0</a><br>'
+            'FFmpeg 8.0.1 · <a href="https://ffmpeg.org/legal.html">GPL-3.0</a>'
+        )
+        credits.setObjectName("aboutCredits")
+        credits.setOpenExternalLinks(True)
+        credits.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        layout.addWidget(credits)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec()
+        dialog.deleteLater()
 
     def sync_input(self):
         if self.input_folder.text() != self.controller.folder:
@@ -741,6 +800,8 @@ class MainWindow(QMainWindow):
                 field.setText(value)
 
     def sync_enabled(self):
+        for action, item in self.menu_actions:
+            action.setEnabled(item.property("enabled"))
         self.input_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
@@ -876,6 +937,20 @@ def main():
         palette = QPalette()
         qt_themes.update_palette(palette, qt_themes.get_themes()[controller.theme])
         app.setPalette(palette)
+    installer = None
+
+    def shutdown_ui():
+        nonlocal installer
+        installer = engine.rootObjects()[0].property("pending_installer")
+        # Release native backing stores while their Quick widgets are still alive.
+        host.destroy()
+        host.deleteLater()
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        engine.deleteLater()
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    # Register before Qt Quick installs its graphics shutdown callbacks.
+    app.aboutToQuit.connect(shutdown_ui)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("standard", StandardIconProvider())
     engine.setInitialProperties({"controller": controller, "visible": False})
@@ -896,9 +971,8 @@ def main():
     qInstallMessageHandler(previous_qt_handler)
     logger.removeHandler(log_file)
     log_file.close()
-    window = engine.rootObjects()[0]
-    if window.property("pending_installer") is not None:
-        os.startfile(window.property("pending_installer"))
+    if installer is not None:
+        install_after_exit(installer)
     if controller.restart_requested:
         subprocess.Popen([sys.executable, "-I", "-m", "folderconformer"])
     return result

@@ -63,6 +63,13 @@ ApplicationWindow {
                         onClicked: dialog.installRequested()
                     }
                 }
+                Label {
+                    objectName: "releaseInfo"
+                    Layout.fillWidth: true
+                    text: dialog.updater.releaseInfo
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                }
             }
         }
         Label {
