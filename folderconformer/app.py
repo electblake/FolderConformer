@@ -13,11 +13,31 @@ from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
 from PySide6.QtCore import QElapsedTimer, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, Qt, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
-from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
+from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
+from PySide6.QtQuick import QQuickImageProvider
+from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout, QLabel, QLineEdit, QMainWindow, QScrollArea, QWidget
+from PySide6.QtWidgets import QApplication, QCheckBox, QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QStyle, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates
+
+
+class StandardIconProvider(QQuickImageProvider):
+    def __init__(self):
+        super().__init__(QQuickImageProvider.ImageType.Pixmap)
+        self.icons = {
+            "check": QStyle.StandardPixmap.SP_BrowserReload,
+            "run": QStyle.StandardPixmap.SP_MediaPlay,
+            "up": QStyle.StandardPixmap.SP_ArrowUp,
+            "down": QStyle.StandardPixmap.SP_ArrowDown,
+        }
+
+    def requestPixmap(self, icon_id, size, requested_size):
+        icon = QApplication.style().standardIcon(self.icons[icon_id])
+        pixmap = icon.pixmap(requested_size, 1.0)
+        size.setWidth(pixmap.width())
+        size.setHeight(pixmap.height())
+        return pixmap
 
 
 class ActivityLogHandler(logging.Handler):
@@ -511,6 +531,42 @@ class MainWindow(QMainWindow):
         quick_window.minimumHeightChanged.connect(container.setMinimumHeight)
         container.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCentralWidget(container)
+        self.input_dock = QDockWidget(self.tr("Input folder"), self)
+        self.input_dock.setObjectName("inputFolderDock")
+        input_contents = QWidget()
+        input_layout = QHBoxLayout(input_contents)
+        self.input_folder = QLineEdit(controller.folder)
+        self.input_folder.setObjectName("inputFolder")
+        self.input_folder.setAccessibleName(self.tr("Input folder path"))
+        self.input_folder.textEdited.connect(lambda text: setattr(controller, "folder", text))
+        input_layout.addWidget(self.input_folder, 1)
+        self.browse_input = QPushButton(self.tr("Browse…"))
+        self.browse_input.setObjectName("browseInputFolder")
+        self.browse_input.clicked.connect(lambda: quick_window.setProperty("choosingFolder", True))
+        input_layout.addWidget(self.browse_input)
+        self.input_dock.setWidget(input_contents)
+        self.addDockWidget(Qt.DockWidgetArea.TopDockWidgetArea, self.input_dock)
+        self.input_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("inputVisible", visible))
+        quick_window.inputToggled.connect(self.input_dock.setVisible)
+        controller.configurationChanged.connect(self.sync_input)
+        self.preview_dock = QDockWidget(self.tr("Target folder preview"), self)
+        self.preview_dock.setObjectName("targetTreeDock")
+        self.preview = QQuickWidget(QQmlEngine.contextForObject(quick_window).engine(), self)
+        self.preview.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
+        self.preview.setInitialProperties({"controller": controller, "font": quick_window.property("font")})
+        self.preview.setSource(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "TargetTree.qml")))
+        preview_root = self.preview.rootObject()
+        quick_window.fontChanged.connect(lambda: preview_root.setProperty("font", quick_window.property("font")))
+        quick_window.paletteChanged.connect(self.sync_preview_palette)
+        self.sync_preview_palette()
+        self.preview.setMinimumSize(math.ceil(preview_root.implicitWidth()), math.ceil(preview_root.implicitHeight()))
+        preview_root.implicitWidthChanged.connect(lambda: self.preview.setMinimumWidth(math.ceil(preview_root.implicitWidth())))
+        preview_root.implicitHeightChanged.connect(lambda: self.preview.setMinimumHeight(math.ceil(preview_root.implicitHeight())))
+        self.preview_dock.setWidget(self.preview)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.preview_dock)
+        self.resizeDocks([self.preview_dock], [280], Qt.Orientation.Horizontal)
+        self.preview_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("previewVisible", visible))
+        quick_window.previewToggled.connect(self.preview_dock.setVisible)
         self.folders_dock = QDockWidget(self.tr("Folders"), self)
         self.folders_dock.setObjectName("foldersDock")
         contents = QWidget()
@@ -581,6 +637,19 @@ class MainWindow(QMainWindow):
         if controller.settings.contains("window/state"):
             self.restoreState(controller.settings.value("window/state"))
 
+    def sync_preview_palette(self):
+        for group in ("active", "inactive", "disabled"):
+            for role in ("window", "windowText", "base", "alternateBase", "text", "placeholderText",
+                         "button", "buttonText", "brightText", "light", "midlight", "dark", "mid",
+                         "shadow", "highlight", "highlightedText", "link", "linkVisited", "toolTipBase",
+                         "toolTipText", "accent"):
+                name = f"palette.{group}.{role}"
+                QQmlProperty.write(self.preview.rootObject(), name, QQmlProperty.read(self.quick_window, name))
+
+    def sync_input(self):
+        if self.input_folder.text() != self.controller.folder:
+            self.input_folder.setText(self.controller.folder)
+
     def sync_folders(self):
         for name, field in self.folder_fields.items():
             value = getattr(self.controller, name)
@@ -588,6 +657,7 @@ class MainWindow(QMainWindow):
                 field.setText(value)
 
     def sync_enabled(self):
+        self.input_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
 
@@ -606,6 +676,8 @@ class MainWindow(QMainWindow):
         self.controller.settings.setValue("window/state", self.saveState())
         self.controller.settings.sync()
         QMetaObject.invokeMethod(self.quick_window, "closeDialogs")
+        self.input_dock.close()
+        self.preview_dock.close()
         self.folders_dock.close()
         self.files_dock.close()
         super().closeEvent(event)
@@ -664,6 +736,7 @@ def main():
         qt_themes.update_palette(palette, qt_themes.get_themes()[controller.theme])
         app.setPalette(palette)
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("standard", StandardIconProvider())
     engine.setInitialProperties({"controller": controller, "visible": False})
     engine.objectCreationFailed.connect(lambda: app.exit(1))
     engine.load(QUrl.fromLocalFile(str(Path(__file__).parent / "qml" / "Main.qml")))

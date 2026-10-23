@@ -11,12 +11,12 @@ from unittest.mock import patch
 
 from PySide6.QtCore import Q_ARG, QEvent, QEventLoop, QMetaObject, QObject, QPointF, QSettings, QTimer, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QKeyEvent
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtWidgets import QApplication
 from PySide6.QtTest import QTest
 
-from folderconformer.app import Controller
+from folderconformer.app import StandardIconProvider, Controller, MainWindow
 from folderconformer.pipeline import conform
 from static_ffmpeg.run import get_platform_dir
 
@@ -50,6 +50,44 @@ class SettingsUiTests(unittest.TestCase):
                 return item
             pending.extend(item.childItems())
 
+    def test_rule_action_icons_are_loaded_compact_and_accessible(self):
+        controller = Controller(self.temporary.name)
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
+        messages = []
+        engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        QTest.qWait(100)
+        for suffix, icon, label in (("Check", "check", "Check this rule"),
+                                    ("RunOnce", "run", "Run this rule once"),
+                                    ("MoveUp", "up", "Move rule up"),
+                                    ("MoveDown", "down", "Move rule down")):
+            with self.subTest(action=suffix):
+                button = self.rule_control(window, controller.rules[0]["id"] + suffix)
+                self.assertTrue(QQmlExpression(QQmlEngine.contextForObject(button), button,
+                                               "display === AbstractButton.IconOnly").evaluate()[0])
+                self.assertAlmostEqual(button.width(), button.height(), delta=1)
+                self.assertTrue(QQmlExpression(QQmlEngine.contextForObject(button), button,
+                                               'icon.width === 16 && icon.height === 16').evaluate()[0])
+                if icon == "check":
+                    self.assertTrue(QQmlExpression(QQmlEngine.contextForObject(button), button,
+                                                   "icon.color.a === 0").evaluate()[0])
+                self.assertEqual(QQmlExpression(QQmlEngine.contextForObject(button), button,
+                                                "Accessible.name").evaluate()[0], label)
+                self.assertEqual(QQmlExpression(QQmlEngine.contextForObject(button), button,
+                                                "ToolTip.text").evaluate()[0], label)
+                images = [item for item in button.findChildren(QQuickItem)
+                          if item.property("source") == QUrl("image://standard/" + icon)]
+                self.assertTrue(images)
+                self.assertTrue(all(QQmlExpression(QQmlEngine.contextForObject(item), item,
+                                                   "status === Image.Ready").evaluate()[0] for item in images))
+        self.assertFalse(self.rule_control(window, controller.rules[0]["id"] + "MoveUp").property("enabled"))
+        self.assertFalse(self.rule_control(window, controller.rules[-1]["id"] + "MoveDown").property("enabled"))
+        self.assertEqual(messages, [])
+        window.close()
+
     def test_check_all_runs_enabled_checks_without_changing_files(self):
         folder = Path(self.temporary.name) / "media"
         folder.mkdir()
@@ -59,6 +97,7 @@ class SettingsUiTests(unittest.TestCase):
                              {"id": "landscape", "enabled": False},
                              {"id": "extension", "enabled": True}]
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -144,6 +183,7 @@ class SettingsUiTests(unittest.TestCase):
         (folder / "video/mp4/clip.mp4").write_text("video")
         controller = Controller(str(folder))
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -179,6 +219,7 @@ class SettingsUiTests(unittest.TestCase):
         (folder / "photo/jpg/clip.jpg").write_text("photo")
         controller = Controller(str(folder))
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -217,6 +258,7 @@ class SettingsUiTests(unittest.TestCase):
         controller.landscapeFolder = "Wide"
         tools = Path(get_platform_dir())
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -283,6 +325,7 @@ class SettingsUiTests(unittest.TestCase):
                 controller = Controller(str(folder))
                 setattr(controller, field, destination)
                 engine = QQmlApplicationEngine()
+                engine.addImageProvider("standard", StandardIconProvider())
                 engine.setInitialProperties({"controller": controller})
                 engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
                 window = engine.rootObjects()[0]
@@ -412,6 +455,7 @@ class SettingsUiTests(unittest.TestCase):
     def test_new_folder_rules_can_move_down_and_disable(self):
         controller = Controller()
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -441,6 +485,7 @@ class SettingsUiTests(unittest.TestCase):
         controller.moveRule(1, -1)
         saved_rules = json.loads(json.dumps(controller.rules))
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -588,6 +633,7 @@ class SettingsUiTests(unittest.TestCase):
         controller._rules = [{"id": rule_id, "enabled": True} for rule_id in
                              ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "extension")]
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
@@ -657,15 +703,18 @@ class SettingsUiTests(unittest.TestCase):
         rule_ids = [rule["id"] for rule in controller.rules]
         qml = QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml"))
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         engine.setInitialProperties({"controller": controller})
         engine.load(qml)
         window = engine.rootObjects()[0]
+        host = MainWindow(controller, window)
+        host.show()
         APP.processEvents()
         for name, value in (("inputFolder", r"C:\media\日本語 é"),):
-            field = window.findChild(QObject, name)
-            field.forceActiveFocus()
-            QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
-            APP.sendEvent(window, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, value))
+            field = host.input_folder
+            field.setFocus()
+            QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+            APP.sendEvent(field, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, value))
             APP.processEvents()
             self.assertEqual(field.property("text"), value)
         for name in [*[rule_id + "Enabled" for rule_id in rule_ids], "extensionMoveUp"]:
@@ -674,24 +723,27 @@ class SettingsUiTests(unittest.TestCase):
             position = control.mapToScene(QPointF(control.width() / 2, control.height() / 2)).toPoint()
             QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
             APP.processEvents()
-        window.close()
+        host.close()
         restored = Controller()
         restored_engine = QQmlApplicationEngine()
+        restored_engine.addImageProvider("standard", StandardIconProvider())
         restored_engine.setInitialProperties({"controller": restored})
         restored_engine.load(qml)
         restored_window = restored_engine.rootObjects()[0]
-        self.assertEqual(restored_window.findChild(QObject, "inputFolder").property("text"), r"C:\media\日本語 é")
+        restored_host = MainWindow(restored, restored_window)
+        self.assertEqual(restored_host.input_folder.text(), r"C:\media\日本語 é")
         self.assertEqual(Path(restored.settings.fileName()), Path(restored.configFolder) / "FolderConformer.ini")
         for rule_id in rule_ids:
             self.assertFalse(self.rule_control(restored_window, rule_id + "Enabled").property("checked"))
         self.assertEqual(restored.rules, [{"id": rule_id, "enabled": False} for rule_id in
                                          [rule_ids[1], rule_ids[0], *rule_ids[2:]]])
-        restored_window.close()
+        restored_host.close()
 
     def test_settings_dialog_saves_theme_and_moves_configuration(self):
         controller = Controller()
         controller.folder = str(Path(self.temporary.name) / "media")
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         messages = []
         engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
         engine.setInitialProperties({"controller": controller})
@@ -776,6 +828,10 @@ def inspect():
     colors.append(host.folders_dock.palette().window().color().name())
     colors.append(host.folder_fields["videoFolder"].palette().base().color().name())
     colors.append(host.file_fields["videoExtensions"].palette().base().color().name())
+    preview = host.preview.rootObject()
+    for expression in ("palette.window.toString()", "palette.button.toString()", "palette.text.toString()"):
+        colors.append(QQmlExpression(QQmlEngine.contextForObject(preview), preview, expression).evaluate()[0])
+    colors.append(host.preview.grabFramebuffer().pixelColor(0, 0).name())
     window.close()
     return 0
 with patch.object(app, "QApplication", return_value=qt), patch.object(app, "QQmlApplicationEngine", return_value=engine), patch.object(qt, "exec", side_effect=inspect), patch.object(sys, "argv", ["folderconformer"]):
@@ -793,11 +849,14 @@ print(json.dumps(colors))
                 self.assertEqual(json.loads(result.stdout), [palette.window().color().name(),
                     palette.window().color().name(), palette.base().color().name(),
                     palette.button().color().name(), palette.window().color().name(),
-                    palette.window().color().name(), palette.base().color().name(), palette.base().color().name()])
+                    palette.window().color().name(), palette.base().color().name(), palette.base().color().name(),
+                    palette.window().color().name(), palette.button().color().name(), palette.text().color().name(),
+                    palette.window().color().name()])
 
     def test_qml_loads(self):
         controller = Controller()
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         messages = []
         engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
         engine.setInitialProperties({"controller": controller})
@@ -820,12 +879,14 @@ print(json.dumps(colors))
         self.addCleanup(lambda: APP.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, False))
         controller = Controller()
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
         messages = []
         engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
         engine.setInitialProperties({"controller": controller})
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
-        window.quitRequested.connect(window.close)
+        host = MainWindow(controller, window)
+        host.show()
         select = window.findChild(QObject, "selectFolderMenu")
         quit_menu = window.findChild(QObject, "quitMenu")
         screen = window.findChild(QObject, "conformerScreen")
@@ -844,7 +905,7 @@ print(json.dumps(colors))
         QMetaObject.invokeMethod(dialog, "reject")
         APP.processEvents()
         APP.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-        self.assertFalse(screen.property("choosingFolder"))
+        self.assertFalse(window.property("choosingFolder"))
         self.assertEqual(controller.folder, "")
         QMetaObject.invokeMethod(select, "triggered")
         APP.processEvents()
@@ -855,13 +916,13 @@ print(json.dumps(colors))
         dialog.setProperty("selectedFolder", QUrl.fromLocalFile(str(folder)))
         QMetaObject.invokeMethod(dialog, "accept")
         APP.processEvents()
-        self.assertFalse(screen.property("choosingFolder"))
+        self.assertFalse(window.property("choosingFolder"))
         self.assertEqual(Path(controller.folder), folder)
-        self.assertEqual(window.findChild(QObject, "inputFolder").property("text"), controller.folder)
+        self.assertEqual(host.input_folder.text(), controller.folder)
         self.assertEqual(Controller().folder, controller.folder)
         QMetaObject.invokeMethod(quit_menu, "triggered")
         APP.processEvents()
-        self.assertFalse(window.isVisible())
+        self.assertFalse(host.isVisible())
         self.assertEqual(messages, [])
 
     def test_processing_pause_resume_stop_and_cancel(self):
@@ -874,6 +935,7 @@ print(json.dumps(colors))
                 controller.folder = str(folder)
                 controller._rules = [{"id": "extension", "enabled": True}]
                 engine = QQmlApplicationEngine()
+                engine.addImageProvider("standard", StandardIconProvider())
                 engine.setInitialProperties({"controller": controller})
                 engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
                 window = engine.rootObjects()[0]

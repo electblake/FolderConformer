@@ -2,12 +2,18 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: window
     required property QtObject controller
     property var pending_installer: null
     signal quitRequested()
+    property bool inputVisible: true
+    signal inputToggled(bool visible)
+    property bool previewVisible: true
+    signal previewToggled(bool visible)
+    property bool choosingFolder: false
     property bool foldersVisible: true
     signal foldersToggled(bool visible)
     property bool filesVisible: true
@@ -25,6 +31,7 @@ ApplicationWindow {
             closeDialogs()
     }
     function closeDialogs() {
+        window.choosingFolder = false
         if (settingsLoader.status === Loader.Ready)
             settingsLoader.item.close()
         if (updateLoader.status === Loader.Ready)
@@ -40,7 +47,7 @@ ApplicationWindow {
                 objectName: "selectFolderMenu"
                 text: qsTr("Select Folder..")
                 enabled: !window.controller.running && !window.controller.updates.busy
-                onTriggered: conformerScreen.choosingFolder = true
+                onTriggered: window.choosingFolder = true
             }
             MenuItem {
                 objectName: "settingsMenu"
@@ -62,6 +69,20 @@ ApplicationWindow {
         }
         Menu {
             title: qsTr("&View")
+            MenuItem {
+                objectName: "inputFolderMenu"
+                text: qsTr("I&nput folder")
+                checkable: true
+                checked: window.inputVisible
+                onTriggered: window.inputToggled(!window.inputVisible)
+            }
+            MenuItem {
+                objectName: "previewMenu"
+                text: qsTr("Target folder &preview")
+                checkable: true
+                checked: window.previewVisible
+                onTriggered: window.previewToggled(!window.previewVisible)
+            }
             MenuItem {
                 objectName: "foldersMenu"
                 text: qsTr("&Folders")
@@ -109,6 +130,21 @@ ApplicationWindow {
                         window.controller.updates.check()
                     }
                 }
+            }
+        }
+    }
+
+    Loader {
+        active: window.choosingFolder
+        sourceComponent: Component {
+            FolderDialog {
+                title: qsTr("Select input folder")
+                Component.onCompleted: open()
+                onAccepted: {
+                    window.controller.selectFolder(selectedFolder)
+                    window.choosingFolder = false
+                }
+                onRejected: window.choosingFolder = false
             }
         }
     }

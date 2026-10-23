@@ -6,7 +6,6 @@ Pane {
     id: screen
     objectName: "conformerScreen"
     required property QtObject controller
-    property alias choosingFolder: folderPanel.choosing
     property string status: qsTr("Ready")
     property string completionSummary: ""
     property int processed: 0
@@ -18,16 +17,6 @@ Pane {
         anchors.fill: parent
         spacing: 12
 
-        FolderPanel {
-            id: folderPanel
-            Layout.fillWidth: true
-            controller: screen.controller
-            enabled: !screen.controller.running
-        }
-        TargetTree {
-            Layout.fillWidth: true
-            controller: screen.controller
-        }
         ScrollView {
             id: settingsScroll
             objectName: "settingsScroll"

@@ -89,12 +89,29 @@ GroupBox {
                 Button {
                     objectName: ruleRow.modelData.id + "Check"
                     text: qsTr("Check")
+                    display: AbstractButton.IconOnly
+                    icon.source: "image://standard/check"
+                    icon.width: 16
+                    icon.height: 16
+                    icon.color: "transparent"
+                    Layout.preferredWidth: implicitHeight
+                    Accessible.name: qsTr("Check this rule")
+                    ToolTip.visible: hovered || activeFocus
+                    ToolTip.text: qsTr("Check this rule")
                     enabled: !panel.controller.running && panel.controller.folder.length > 0
                     onClicked: panel.controller.checkRule(ruleRow.modelData.id)
                 }
                 Button {
                     objectName: ruleRow.modelData.id + "RunOnce"
                     text: qsTr("Run Once")
+                    display: AbstractButton.IconOnly
+                    icon.source: "image://standard/run"
+                    icon.width: 16
+                    icon.height: 16
+                    Layout.preferredWidth: implicitHeight
+                    Accessible.name: qsTr("Run this rule once")
+                    ToolTip.visible: hovered || activeFocus
+                    ToolTip.text: qsTr("Run this rule once")
                     enabled: !panel.controller.running && panel.controller.folder.length > 0
                         && ((ruleRow.modelData.id !== "landscape" && ruleRow.modelData.id !== "landscape_images")
                             || panel.controller.landscapeFolder.length > 0)
@@ -103,12 +120,28 @@ GroupBox {
                 Button {
                     objectName: ruleRow.modelData.id + "MoveUp"
                     text: qsTr("Move up")
+                    display: AbstractButton.IconOnly
+                    icon.source: "image://standard/up"
+                    icon.width: 16
+                    icon.height: 16
+                    Layout.preferredWidth: implicitHeight
+                    Accessible.name: qsTr("Move rule up")
+                    ToolTip.visible: hovered || activeFocus
+                    ToolTip.text: qsTr("Move rule up")
                     enabled: ruleRow.index > 0
                     onClicked: panel.controller.moveRule(ruleRow.index, -1)
                 }
                 Button {
                     objectName: ruleRow.modelData.id + "MoveDown"
                     text: qsTr("Move down")
+                    display: AbstractButton.IconOnly
+                    icon.source: "image://standard/down"
+                    icon.width: 16
+                    icon.height: 16
+                    Layout.preferredWidth: implicitHeight
+                    Accessible.name: qsTr("Move rule down")
+                    ToolTip.visible: hovered || activeFocus
+                    ToolTip.text: qsTr("Move rule down")
                     enabled: ruleRow.index < panel.controller.rules.length - 1
                     onClicked: panel.controller.moveRule(ruleRow.index, 1)
                 }

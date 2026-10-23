@@ -50,6 +50,7 @@ class UpdateTests(unittest.TestCase):
 
     def open_dialog(self, controller):
         engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", app.StandardIconProvider())
         messages = []
         engine.warnings.connect(lambda warnings: messages.extend(w.toString() for w in warnings))
         engine.setInitialProperties({"controller": controller})

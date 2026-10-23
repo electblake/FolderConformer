@@ -10,13 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added Check all beside Execute rules to check all enabled rules in their displayed order without changing files.
-- Added a virtual Qt tree above the rules list showing configured image, video, and Data destinations, landscape subfolders, and sample filenames for configured extensions.
+- Added a virtual Qt tree showing configured image, video, and Data destinations, landscape subfolders, and sample filenames for configured extensions.
 - Made the target preview update live when folder names, extensions, or enabled rules change, including root extension groups for files without an enabled destination-moving rule.
 - Added configured image and video sample filenames inside landscape preview folders.
 - Added persistent application logging with worker output, tracebacks, process exit details, and Qt messages.
 
 ### Changed
 
+- Moved the input folder path and Browse controls into a dock that defaults to the top, with View-menu visibility, saved layout, and Reset Layout support.
+- Moved the target folder preview, Collapse all, and Open all controls into a dock that defaults to the left, preserving live updates, expansion state, and independent scrolling.
+- Replaced rule action labels with compact built-in Qt refresh, play, up, and down icons, retaining tooltips and accessible names.
 - Moved Copy Output below the activity log.
 - Changed landscape checks to probe only the first item in the configured landscape destination; missing or empty destinations report BAD.
 - Made loose-file, image, video, data, and empty-directory checks stop at the first item that determines BAD without building complete file lists.
@@ -25,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserved input controls' busy-state locking and closed floating input and preview docks with the main window.
+- Kept preview text, buttons, and tree readable across light and dark themes and larger fonts, and removed a duplicate View-menu keyboard mnemonic.
 - Kept the rules list in place when expanding the preview and adjusted the window minimum height to keep controls accessible with larger text.
 
 ## [0.8.0] - 2026-10-22

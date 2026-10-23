@@ -2,13 +2,15 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 
-GroupBox {
+Pane {
     id: panel
     objectName: "targetTreePanel"
     required property QtObject controller
-    title: qsTr("Target folder preview")
+    enabled: !panel.controller.updates.busy
+    contentWidth: contents.implicitWidth
     contentHeight: contents.implicitHeight
 
     FontMetrics {
