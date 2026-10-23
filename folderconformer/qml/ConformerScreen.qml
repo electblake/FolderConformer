@@ -31,75 +31,82 @@ Pane {
             Layout.preferredHeight: 800
             contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
             clip: true
-            ColumnLayout {
+            RulesPanel {
+                id: rulesPanel
                 width: settingsScroll.contentWidth
-                spacing: 12
-                RulesPanel {
-                    id: rulesPanel
-                    Layout.fillWidth: true
-                    controller: screen.controller
-                    enabled: !screen.controller.running
-                    onRunOnceRequested: function(index) {
-                        log.clear()
-                        screen.completionSummary = ""
-                        screen.processed = 0
-                        screen.total = 0
-                        screen.status = qsTr("Processing…")
-                        screen.controller.start(index)
-                    }
-                }
-            }
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            Button {
-                text: qsTr("Execute rules")
-                enabled: !screen.controller.running && screen.controller.folder.length > 0
-                    && (!screen.controller.rules.some(rule => (rule.id === "landscape" || rule.id === "landscape_images") && rule.enabled)
-                        || screen.controller.landscapeFolder.length > 0)
-                onClicked: {
+                controller: screen.controller
+                enabled: !screen.controller.running
+                onRunOnceRequested: function(index) {
                     log.clear()
                     screen.completionSummary = ""
                     screen.processed = 0
                     screen.total = 0
                     screen.status = qsTr("Processing…")
-                    screen.controller.start()
+                    screen.controller.start(index)
                 }
             }
-            Button {
-                objectName: "pauseProcessing"
-                text: screen.controller.runState === "paused" || screen.controller.runState === "pausing"
-                    ? qsTr("Resume") : qsTr("Pause")
-                enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
-                    && screen.controller.runState !== "cancelling"
-                onClicked: screen.controller.pause()
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: screen.availableWidth >= processingActions.implicitWidth + outputActions.implicitWidth + columnSpacing ? 2 : 1
+            RowLayout {
+                id: processingActions
+                Layout.fillWidth: true
+                Button {
+                    objectName: "executeRules"
+                    text: qsTr("Execute rules")
+                    enabled: !screen.controller.running && screen.controller.folder.length > 0
+                        && (!screen.controller.rules.some(rule => (rule.id === "landscape" || rule.id === "landscape_images") && rule.enabled)
+                            || screen.controller.landscapeFolder.length > 0)
+                    onClicked: {
+                        log.clear()
+                        screen.completionSummary = ""
+                        screen.processed = 0
+                        screen.total = 0
+                        screen.status = qsTr("Processing…")
+                        screen.controller.start()
+                    }
+                }
+                Button {
+                    objectName: "pauseProcessing"
+                    text: screen.controller.runState === "paused" || screen.controller.runState === "pausing"
+                        ? qsTr("Resume") : qsTr("Pause")
+                    enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
+                        && screen.controller.runState !== "cancelling"
+                    onClicked: screen.controller.pause()
+                }
+                Button {
+                    objectName: "stopProcessing"
+                    text: qsTr("Stop")
+                    enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
+                        && screen.controller.runState !== "cancelling"
+                    onClicked: screen.controller.stop()
+                }
+                Button {
+                    objectName: "cancelProcessing"
+                    text: qsTr("Cancel")
+                    enabled: screen.controller.running && screen.controller.runState !== "cancelling"
+                    onClicked: screen.controller.cancel()
+                }
+                Item { Layout.fillWidth: true }
             }
-            Button {
-                objectName: "stopProcessing"
-                text: qsTr("Stop")
-                enabled: screen.controller.running && !screen.controller.checking && screen.controller.runState !== "stopping"
-                    && screen.controller.runState !== "cancelling"
-                onClicked: screen.controller.stop()
-            }
-            Button {
-                objectName: "cancelProcessing"
-                text: qsTr("Cancel")
-                enabled: screen.controller.running && screen.controller.runState !== "cancelling"
-                onClicked: screen.controller.cancel()
-            }
-            Item { Layout.fillWidth: true }
-            Button {
-                objectName: "openOutputFolder"
-                text: qsTr("Open Output Folder")
-                enabled: screen.controller.folder.length > 0
-                onClicked: screen.controller.openOutputFolder()
-            }
-            Button {
-                objectName: "copyOutput"
-                text: qsTr("Copy Output")
-                onClicked: {
-                    log.selectAll()
-                    log.copy()
+            RowLayout {
+                id: outputActions
+                Layout.alignment: Qt.AlignRight
+                Button {
+                    objectName: "openOutputFolder"
+                    text: qsTr("Open Output Folder")
+                    enabled: screen.controller.folder.length > 0
+                    onClicked: screen.controller.openOutputFolder()
+                }
+                Button {
+                    objectName: "copyOutput"
+                    text: qsTr("Copy Output")
+                    onClicked: {
+                        log.selectAll()
+                        log.copy()
+                    }
                 }
             }
         }

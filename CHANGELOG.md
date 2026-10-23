@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-22
+
+### Added
+
+- Added a Data destination in Folders (default `Data/`) and Data file extensions in Files (default `csv;db;txt;`).
+- Added R3 to move matching data files into the configured Data folder, with checks, Run Once, saved settings, and conflict handling.
+
+### Changed
+
+- Removed redundant single-child QML layouts and explicitly bound nested components to their defining context.
+
+### Fixed
+
+- Kept action buttons visible at larger text sizes by stacking the processing and output groups when the window is narrow.
+- Kept data files already in the destination unchanged when the Data folder is set to the input root, including with conflict numbering enabled.
+
 ## [0.7.2] - 2026-10-22
 
 ### Changed

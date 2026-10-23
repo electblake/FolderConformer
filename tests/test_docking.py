@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import PropertyMock, patch
 
-from PySide6.QtCore import QEvent, QMetaObject, QObject, Qt, QUrl
+from PySide6.QtCore import QEvent, QMetaObject, QObject, QPointF, Qt, QUrl
 from PySide6.QtGui import QKeyEvent, QValidator
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
@@ -48,7 +48,7 @@ class DockingTests(unittest.TestCase):
         dock = self.host.folders_dock
         self.assertIsInstance(dock, QDockWidget)
         self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
-        self.assertEqual(len(dock.findChildren(QLineEdit)), 3)
+        self.assertEqual(len(dock.findChildren(QLineEdit)), 4)
         self.assertIsNone(self.quick.findChild(QObject, "ruleFoldersPanel"))
         dock.setFloating(True)
         QTest.qWait(30)
@@ -69,7 +69,7 @@ class DockingTests(unittest.TestCase):
         self.assertTrue(dock.isVisible())
 
     def test_folder_edits_persist_update_rules_and_keep_keyboard_order(self):
-        values = {"landscapeFolder": "Wide media é", "videoFolder": "Clips/", "imageFolder": "Pictures/"}
+        values = {"landscapeFolder": "Wide media é", "videoFolder": "Clips/", "imageFolder": "Pictures/", "dataFolder": "Records/"}
         fields = list(self.host.folder_fields.values())
         self.host.activateWindow()
         for name, value in values.items():
@@ -95,7 +95,7 @@ class DockingTests(unittest.TestCase):
         self.assertEqual(self.host.dockWidgetArea(dock), Qt.DockWidgetArea.RightDockWidgetArea)
         self.assertGreaterEqual(dock.y(), folders.y() + folders.height())
         self.assertEqual(dock.x(), folders.x())
-        self.assertEqual(len(dock.findChildren(QLineEdit)), 2)
+        self.assertEqual(len(dock.findChildren(QLineEdit)), 3)
         self.assertIsNone(self.quick.findChild(QObject, "filesPanel"))
         dock.setFloating(True)
         self.assertTrue(dock.isFloating())
@@ -113,7 +113,7 @@ class DockingTests(unittest.TestCase):
     def test_extension_edits_persist_and_keep_keyboard_order(self):
         self.host.activateWindow()
         fields = list(self.host.file_fields.values())
-        for name, value in (("videoExtensions", "mxf;MP4"), ("imageExtensions", "gif;png")):
+        for name, value in (("videoExtensions", "mxf;MP4"), ("imageExtensions", "gif;png"), ("dataExtensions", " .CSV;db;txt;")):
             field = self.host.file_fields[name]
             field.setFocus()
             QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
@@ -214,6 +214,7 @@ class DockingTests(unittest.TestCase):
         font = self.host.font()
         font.setPointSize(18)
         self.host.setFont(font)
+        self.quick.setProperty("font", font)
         self.host.resize(900, 600)
         APP.processEvents()
         for field in [*self.host.folder_fields.values(), *self.host.file_fields.values()]:
@@ -222,6 +223,19 @@ class DockingTests(unittest.TestCase):
         scroll = self.host.folders_dock.widget()
         self.assertTrue(scroll.widgetResizable())
         self.assertGreaterEqual(self.quick.width(), 640)
+        pending = [self.quick.contentItem()]
+        controls = {}
+        while pending:
+            item = pending.pop()
+            controls[item.objectName()] = item
+            pending.extend(item.childItems())
+        for name in ("executeRules", "pauseProcessing", "stopProcessing", "cancelProcessing",
+                     "openOutputFolder", "copyOutput"):
+            button = controls[name]
+            position = button.mapToScene(QPointF(0, 0))
+            self.assertGreaterEqual(position.x(), 0, name)
+            self.assertLessEqual(position.x() + button.width(), self.quick.width(), name)
+            self.assertLessEqual(position.y() + button.height(), self.quick.height(), name)
 
     def test_rule_columns_remain_readable_in_narrow_window(self):
         self.host.resize(900, 600)
@@ -230,7 +244,7 @@ class DockingTests(unittest.TestCase):
         self.assertGreater(scroll.property("contentWidth"), scroll.property("availableWidth"))
         expected_media = {"landscape": "video", "extension": "other", "rename_images": "image",
                           "rename_videos": "video", "photo_extensions": "image", "video_extensions": "video",
-                          "remove_empty_dirs": "other", "landscape_images": "image"}
+                          "remove_empty_dirs": "other", "landscape_images": "image", "data_extensions": "other"}
         pending = [self.quick.contentItem()]
         controls = {}
         while pending:
@@ -244,7 +258,7 @@ class DockingTests(unittest.TestCase):
             self.assertEqual(media_label.property("text"), media)
             self.assertLess(controls[rule_id + "RuleType"].x(), media_label.x())
             self.assertLess(media_label.x(), name.x())
-        for rule_id in ("photo_extensions", "video_extensions"):
+        for rule_id in ("photo_extensions", "video_extensions", "data_extensions"):
             self.assertEqual(controls[rule_id + "RuleType"].property("text"), "file")
 
     def test_layout_restores_in_fresh_process_after_close_and_restart(self):

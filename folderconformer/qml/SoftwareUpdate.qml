@@ -80,14 +80,12 @@ ApplicationWindow {
             value: dialog.updater.progress
             Accessible.name: qsTr("Update progress")
         }
-        RowLayout {
+        Button {
+            objectName: "closeUpdate"
             Layout.alignment: Qt.AlignRight
-            Button {
-                objectName: "closeUpdate"
-                text: qsTr("Close")
-                enabled: !dialog.updater.busy
-                onClicked: dialog.close()
-            }
+            text: qsTr("Close")
+            enabled: !dialog.updater.busy
+            onClicked: dialog.close()
         }
     }
 }

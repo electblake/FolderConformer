@@ -161,7 +161,7 @@ class SettingsUiTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(folder, rules, controller.landscapeFolder, tools / "ffprobe.exe",
                             controller.videoFolder, controller.imageFolder, controller.videoExtensions,
-                            controller.imageExtensions)
+                            controller.imageExtensions, controller.dataFolder, controller.dataExtensions)
                 self.assertTrue((media / f"square.{suffix}").is_file())
                 QMetaObject.invokeMethod(button, "clicked")
                 self.assertTrue(controller.process.waitForFinished(10000))
@@ -169,7 +169,7 @@ class SettingsUiTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(folder, rules, controller.landscapeFolder, tools / "ffprobe.exe",
                             controller.videoFolder, controller.imageFolder, controller.videoExtensions,
-                            controller.imageExtensions, enumerate_conflicts=True)
+                            controller.imageExtensions, controller.dataFolder, controller.dataExtensions, enumerate_conflicts=True)
                 QMetaObject.invokeMethod(button, "clicked")
                 self.assertTrue(controller.process.waitForFinished(10000))
                 self.assertEqual(status.property("text"), "OK")
@@ -194,7 +194,7 @@ class SettingsUiTests(unittest.TestCase):
         for enumerate_conflicts, expected in ((False, "BAD"), (True, "OK")):
             with contextlib.redirect_stdout(io.StringIO()):
                 conform(folder, [{"id": "extension", "enabled": True}], "Wide", Path("unused"),
-                        "video/", "photo/", "mp4", "png", enumerate_conflicts=enumerate_conflicts)
+                        "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;", enumerate_conflicts=enumerate_conflicts)
             controller.checkRule("extension")
             self.assertTrue(controller.process.waitForFinished(10000))
             self.assertEqual(controller.checkStatuses["extension"], expected)
@@ -332,7 +332,8 @@ class SettingsUiTests(unittest.TestCase):
         controller.save()
         restored = Controller()
         self.assertEqual(restored.rules, controller.rules + [{"id": "remove_empty_dirs", "enabled": True},
-                                                                  {"id": "landscape_images", "enabled": True}])
+                                                                  {"id": "landscape_images", "enabled": True},
+                                                                  {"id": "data_extensions", "enabled": True}])
         restored.setEnabled(2, False)
         restored.moveRule(2, -1)
         self.assertEqual(Controller().rules, restored.rules)
@@ -347,7 +348,7 @@ class SettingsUiTests(unittest.TestCase):
         window.requestActivate()
         self.assertTrue(QTest.qWaitForWindowActive(window))
         self.assertFalse(self.rule_control(window, "landscapeMoveUp").property("enabled"))
-        self.assertFalse(self.rule_control(window, "landscape_imagesMoveDown").property("enabled"))
+        self.assertFalse(self.rule_control(window, "data_extensionsMoveDown").property("enabled"))
         for name in ("rename_imagesMoveDown", "rename_imagesEnabled"):
             QTest.qWait(30)
             control = self.rule_control(window, name)
@@ -413,9 +414,42 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(controller.configFolder, str(self.config_folder))
         self.assertEqual(controller.videoFolder, "video/")
         self.assertEqual(controller.imageFolder, "photo/")
+        self.assertEqual(controller.dataFolder, "Data/")
+        self.assertEqual(controller.dataExtensions, "csv;db;txt;")
         self.assertEqual(controller.videoExtensions,
                          "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf")
         self.assertEqual(controller.imageExtensions, "jpg;jpeg;png;webp;heic")
+
+    def test_data_rule_checks_and_run_once_use_custom_settings(self):
+        folder = Path(self.temporary.name) / "input"
+        folder.mkdir()
+        (folder / "catalog.SQLITE").write_text("database")
+        (folder / "notes.txt").write_text("notes")
+        controller = Controller(str(folder))
+        controller.dataFolder = "Records/"
+        controller.dataExtensions = " .SQLITE; "
+        index = next(i for i, rule in enumerate(controller.rules) if rule["id"] == "data_extensions")
+        controller.setEnabled(index, False)
+        controller.moveRule(index, -1)
+        index -= 1
+        controller.checkRule("data_extensions")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["data_extensions"], "BAD")
+        controller.start(index)
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertEqual((folder / "Records/catalog.SQLITE").read_text(), "database")
+        self.assertEqual((folder / "notes.txt").read_text(), "notes")
+        self.assertFalse(controller.rules[index]["enabled"])
+        controller.checkRule("data_extensions")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["data_extensions"], "OK")
+        controller.dataFolder = "Other/"
+        self.assertEqual(controller.checkStatuses, {})
+        controller.checkRule("data_extensions")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        controller.dataExtensions = "txt;"
+        self.assertEqual(controller.checkStatuses, {})
 
     def test_all_control_values_restore_in_fresh_process(self):
         controller = Controller()
@@ -425,6 +459,8 @@ class SettingsUiTests(unittest.TestCase):
         controller.imageFolder = "Pictures/"
         controller.videoExtensions = "mxf;mp4"
         controller.imageExtensions = "gif;png"
+        controller.dataFolder = "Records/"
+        controller.dataExtensions = " .CSV; sqlite; "
         controller.selectConfigFolder(QUrl.fromLocalFile(str(Path(self.temporary.name) / "custom config")))
         for index in range(len(controller.rules)):
             controller.setEnabled(index, False)
@@ -434,14 +470,14 @@ class SettingsUiTests(unittest.TestCase):
             "from folderconformer import app; qt=QCoreApplication([]); "
             "app.user_config_path=lambda *a,**k:Path(sys.argv[1]); c=app.Controller(); "
             "print(json.dumps([c.folder,c.landscapeFolder,c.rules,"
-            "c.videoFolder,c.imageFolder,c.videoExtensions,c.imageExtensions,c.configFolder]))"
+            "c.videoFolder,c.imageFolder,c.videoExtensions,c.imageExtensions,c.dataFolder,c.dataExtensions,c.configFolder]))"
         )
         result = subprocess.run([sys.executable, "-c", read_script, str(self.config_folder)],
                                 check=True, capture_output=True, text=True)
         self.assertEqual(json.loads(result.stdout), [
             controller.folder, "Paysage é",
             controller.rules,
-            "Clips/", "Pictures/", "mxf;mp4", "gif;png", controller.configFolder,
+            "Clips/", "Pictures/", "mxf;mp4", "gif;png", "Records/", " .CSV; sqlite; ", controller.configFolder,
         ])
         self.assertEqual(controller.settings.status(), QSettings.Status.NoError)
 
@@ -539,7 +575,7 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(second.landscapeFolder, "Wide media")
         self.assertEqual(second.rules, [{"id": "extension", "enabled": True}, {"id": "landscape", "enabled": False}]
                                  + [{"id": rule_id, "enabled": True} for rule_id in
-                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images")])
+                                    ("rename_images", "rename_videos", "photo_extensions", "video_extensions", "remove_empty_dirs", "landscape_images", "data_extensions")])
         second.moveRule(5, -1)
         second.setEnabled(4, False)
         self.assertEqual(Controller().rules, second.rules)

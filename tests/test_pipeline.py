@@ -21,7 +21,7 @@ FFPROBE = Path(get_platform_dir()) / "ffprobe.exe"
 APP = QApplication.instance() or QApplication([])
 FOLDER_FILES = ("video/", "photo/",
                 "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
-                "jpg;jpeg;png;webp;heic")
+                "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;")
 
 
 class PipelineTests(unittest.TestCase):
@@ -47,6 +47,66 @@ class PipelineTests(unittest.TestCase):
             with self.subTest(rule=rule_id):
                 self.assertEqual(check_rule(self.folder, rule_id, *FOLDER_FILES, FFPROBE), "BAD")
         self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_data_rule_moves_matching_files_and_preserves_scan_boundaries(self):
+        for directory in ("CSV/deep", "Data/db", "nested"):
+            (self.folder / directory).mkdir(parents=True)
+        moved = ("report.CSV", "notes.txt", "CSV/table.csv", "Data/db/catalog.db")
+        untouched = ("image.png", "CSV/other.png", "CSV/deep/nested.csv", "nested/note.txt", "Data/existing.txt")
+        for name in (*moved, *untouched):
+            (self.folder / name).write_text(name)
+        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE), "BAD")
+        self.run_rules([{"id": "data_extensions", "enabled": True}])
+        for name in moved:
+            self.assertEqual((self.folder / "Data" / Path(name).name).read_text(), name)
+            self.assertFalse((self.folder / name).exists())
+        for name in untouched:
+            self.assertEqual((self.folder / name).read_text(), name)
+        self.assertEqual(check_rule(self.folder, "data_extensions", *FOLDER_FILES, FFPROBE), "OK")
+        self.run_rules([{"id": "data_extensions", "enabled": True}])
+        self.assertEqual(len(list((self.folder / "Data").glob("*.*"))), 5)
+
+    def test_data_rule_respects_conflicts_and_extension_rule_order(self):
+        for order in (("extension", "data_extensions"), ("data_extensions", "extension")):
+            with self.subTest(order=order):
+                root = self.folder / order[0]
+                (root / "Data").mkdir(parents=True)
+                (root / "Data/note.txt").write_text("existing")
+                (root / "note.txt").write_text("incoming")
+                rules = [{"id": name, "enabled": True} for name in order]
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(root, rules, "Wide", FFPROBE, *FOLDER_FILES)
+                self.assertEqual((root / "Data/note.txt").read_text(), "existing")
+                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE), "BAD")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(root, rules, "Wide", FFPROBE, *FOLDER_FILES, enumerate_conflicts=True)
+                self.assertEqual((root / "Data/note_1.txt").read_text(), "incoming")
+                self.assertEqual(check_rule(root, "data_extensions", *FOLDER_FILES, FFPROBE), "OK")
+
+    def test_data_rule_custom_extensions_and_disabled_rule(self):
+        (self.folder / "records.SQLITE").write_text("database")
+        (self.folder / "notes.txt").write_text("notes")
+        config = (*FOLDER_FILES[:4], "Records/", " .SQLITE; ;csv; ")
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, [{"id": "data_extensions", "enabled": False}], "Wide", FFPROBE, *config)
+        self.assertTrue((self.folder / "records.SQLITE").is_file())
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, [{"id": "data_extensions", "enabled": True}], "Wide", FFPROBE, *config)
+        self.assertEqual((self.folder / "Records/records.SQLITE").read_text(), "database")
+        self.assertEqual((self.folder / "notes.txt").read_text(), "notes")
+
+    def test_data_rule_does_not_rename_files_already_in_root_destination(self):
+        (self.folder / "notes.txt").write_text("existing")
+        (self.folder / "csv").mkdir()
+        (self.folder / "csv/table.csv").write_text("table")
+        config = (*FOLDER_FILES[:4], "./", "csv;db;txt;")
+        rules = [{"id": "data_extensions", "enabled": True}]
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, rules, "Wide", FFPROBE, *config, enumerate_conflicts=True)
+        self.assertEqual((self.folder / "notes.txt").read_text(), "existing")
+        self.assertEqual((self.folder / "table.csv").read_text(), "table")
+        self.assertFalse((self.folder / "notes_1.txt").exists())
+        self.assertEqual(check_rule(self.folder, "data_extensions", *config, FFPROBE), "OK")
 
     def test_summary_counts_folder_changes_when_no_files_are_scanned(self):
         for name in ("Images", "Videos", "jpg", "mp4"):
@@ -206,8 +266,8 @@ class PipelineTests(unittest.TestCase):
             "rename_images", "rename_videos", "photo_extensions", "video_extensions",
         )]
         with contextlib.redirect_stdout(io.StringIO()):
-            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ")
-            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ")
+            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ", "Data/", "csv;db;txt;")
+            conform(self.folder, rules, "Wide", FFPROBE, "Clips/", "Pictures/", " .MXF; ", " GIF; ", "Data/", "csv;db;txt;")
         for path, content in (("Pictures/keep.txt", "Images"), ("Clips/keep.txt", "Videos"),
                               ("GIF/keep.txt", "GIF"), ("mxf/keep.txt", "mxf"),
                               ("jpg/keep.txt", "jpg"), ("mp4/keep.txt", "mp4")):
@@ -241,7 +301,7 @@ class PipelineTests(unittest.TestCase):
                 root = self.folder / rule_id
                 root.mkdir()
                 rules = [{"id": rule_id, "enabled": True}]
-                config = ("Clips/", "Pictures/", "mp4", "png")
+                config = ("Clips/", "Pictures/", "mp4", "png", "Data/", "csv;db;txt;")
                 self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "BAD")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, rules, "Wide", FFPROBE, *config)
@@ -284,11 +344,11 @@ class PipelineTests(unittest.TestCase):
                     (root / alias / "nested" / f"{alias}.txt").write_text(alias)
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
-                            "clips", "photo", "mp4", "png")
+                            "clips", "photo", "mp4", "png", "Data/", "csv;db;txt;")
                 for alias in aliases:
                     self.assertFalse((root / alias).exists())
                     self.assertEqual((root / destination / "nested" / f"{alias}.txt").read_text(), alias)
-                self.assertEqual(check_rule(root, rule_id, "clips", "photo", "mp4", "png", FFPROBE), "OK")
+                self.assertEqual(check_rule(root, rule_id, "clips", "photo", "mp4", "png", "Data/", "csv;db;txt;", FFPROBE), "OK")
 
     def test_case_only_destination_rename_with_another_alias_to_merge(self):
         for rule_id, aliases, destination in (("rename_images", ("image", "images"), "IMAGES"),
@@ -298,7 +358,7 @@ class PipelineTests(unittest.TestCase):
                 for alias in aliases:
                     (root / alias).mkdir(parents=True)
                     (root / alias / f"{alias}.txt").write_text(alias)
-                config = ("VIDEOS", "IMAGES", "mp4", "png")
+                config = ("VIDEOS", "IMAGES", "mp4", "png", "Data/", "csv;db;txt;")
                 self.assertEqual(check_rule(root, rule_id, *config, FFPROBE), "BAD")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(root, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE, *config)
@@ -370,7 +430,7 @@ class PipelineTests(unittest.TestCase):
                 (self.folder / directory / f"other.{other_suffix}").write_text("not matching media")
                 with contextlib.redirect_stdout(io.StringIO()):
                     conform(self.folder, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
-                            "Clips/", "Pictures/", " .MP4; ", " .PNG; ")
+                            "Clips/", "Pictures/", " .MP4; ", " .PNG; ", "Data/", "csv;db;txt;")
                 for name in ("wide", "square"):
                     self.assertTrue((self.folder / directory / "Wide" / f"{name}.{suffix}").is_file())
                 for name in (f"portrait.{suffix}", f"nested/deep.{suffix}", f"other.{other_suffix}"):

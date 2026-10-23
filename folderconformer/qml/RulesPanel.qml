@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -33,7 +35,8 @@ GroupBox {
                         photo_extensions: "J1",
                         video_extensions: "S6",
                         remove_empty_dirs: "K9",
-                        landscape_images: "B7"
+                        landscape_images: "B7",
+                        data_extensions: "R3"
                     })[ruleRow.modelData.id]
                 }
                 Label {
@@ -48,7 +51,7 @@ GroupBox {
                     Layout.preferredWidth: 64
                     text: ruleRow.modelData.id === "landscape" || ruleRow.modelData.id === "landscape_images"
                         || ruleRow.modelData.id === "extension" || ruleRow.modelData.id === "photo_extensions"
-                        || ruleRow.modelData.id === "video_extensions"
+                        || ruleRow.modelData.id === "video_extensions" || ruleRow.modelData.id === "data_extensions"
                         ? qsTr("file") : qsTr("folder")
                 }
                 Label {
@@ -62,7 +65,8 @@ GroupBox {
                         photo_extensions: qsTr("image"),
                         video_extensions: qsTr("video"),
                         remove_empty_dirs: qsTr("other"),
-                        landscape_images: qsTr("image")
+                        landscape_images: qsTr("image"),
+                        data_extensions: qsTr("other")
                     })[ruleRow.modelData.id]
                 }
                 CheckBox {
@@ -71,6 +75,7 @@ GroupBox {
                     text: ({
                         landscape: qsTr("Move landscape and square videos"),
                         landscape_images: qsTr("Move landscape and square images"),
+                        data_extensions: qsTr("Move data files into Data folder"),
                         extension: qsTr("Group loose files by extension"),
                         rename_images: qsTr("Single images folder"),
                         rename_videos: qsTr("Single videos folder"),

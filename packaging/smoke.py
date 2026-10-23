@@ -49,6 +49,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
                                 ("jpg", "image.bin"), ("mp4", "movie.bin")):
         (media / directory).mkdir()
         (media / directory / filename).write_bytes(b"preserved")
+    (media / "records.csv").write_bytes(b"data records")
     ffmpeg = subprocess.run([
         str(python), "-I", "-c", "from static_ffmpeg.run import get_platform_dir; "
         "from pathlib import Path; print(Path(get_platform_dir())/'ffmpeg.exe')",
@@ -59,22 +60,23 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     ], env=environment, check=True)
     rules = [{"id": rule_id, "enabled": True} for rule_id in (
         "rename_images", "rename_videos", "extension", "photo_extensions", "video_extensions",
-        "landscape", "landscape_images", "remove_empty_dirs",
+        "landscape", "landscape_images", "data_extensions", "remove_empty_dirs",
     )]
     result = subprocess.run([
         str(python), "-I", "-m", "folderconformer", "--worker", str(media), json.dumps(rules), "Landscape-FULL",
         "video/", "photo/", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf",
-        "jpg;jpeg;png;webp;heic",
+        "jpg;jpeg;png;webp;heic", "Data/", "csv;db;txt;",
     ], env=environment, cwd=work, check=True, stdout=subprocess.PIPE, encoding="utf-8")
     assert (media / "photo/Landscape-FULL/wide.png").is_file()
+    assert (media / "Data/records.csv").read_bytes() == b"data records"
     for name in ("photo/photo.bin", "video/video.bin", "photo/image.bin", "video/movie.bin"):
         assert (media / name).read_bytes() == b"preserved"
     assert "2 folders renamed." in result.stdout
     for rule_id in ("rename_images", "rename_videos", "photo_extensions", "video_extensions",
-                    "landscape", "landscape_images", "remove_empty_dirs", "extension"):
+                    "landscape", "landscape_images", "data_extensions", "remove_empty_dirs", "extension"):
         checked = subprocess.run([
             str(python), "-I", "-m", "folderconformer", "--check", str(media), rule_id,
-            "video/", "photo/", "mp4", "png",
+            "video/", "photo/", "mp4", "png", "Data/", "csv;db;txt;",
         ], env=environment, cwd=work, check=True, capture_output=True, text=True)
         assert checked.stdout.strip() == f"Check: {rule_id} OK", checked.stdout
     process = QProcess()
@@ -93,4 +95,4 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-online-") as temporary:
     subprocess.run([str(install / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], check=True)
     assert not runtime.exists()
     assert not (install / "source").exists()
-print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, eight rules and checks, GUI, reinstall, uninstall.")
+print(f"Online installer passed: {installer.stat().st_size:,} bytes; install, nine rules and checks, GUI, reinstall, uninstall.")

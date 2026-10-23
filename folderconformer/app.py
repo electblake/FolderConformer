@@ -51,10 +51,12 @@ class Controller(QObject):
         self._landscape_folder = self.settings.value("landscapeFolder", "Landscape-FULL", type=str)
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
+        self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
         self._video_extensions = self.settings.value(
             "videoExtensions", "mp4;ts;m4v;wmv;avi;mov;mkv;webm;mpg;mpeg;mts;m2ts;m2v;vob;flv;3gp;3g2;ogv;asf", type=str
         )
         self._image_extensions = self.settings.value("imageExtensions", "jpg;jpeg;png;webp;heic", type=str)
+        self._data_extensions = self.settings.value("dataExtensions", "csv;db;txt;", type=str)
         self._rules = json.loads(self.settings.value(
             "rules", json.dumps([{"id": rule_id, "enabled": True} for rule_id in (
                 "landscape", "extension", "rename_images", "rename_videos", "photo_extensions", "video_extensions",
@@ -64,6 +66,8 @@ class Controller(QObject):
             self._rules.append({"id": "remove_empty_dirs", "enabled": True})
         if not any(rule["id"] == "landscape_images" for rule in self._rules):
             self._rules.append({"id": "landscape_images", "enabled": True})
+        if not any(rule["id"] == "data_extensions" for rule in self._rules):
+            self._rules.append({"id": "data_extensions", "enabled": True})
         if folder is not None:
             self.folder = folder
         self.process = QProcess(self)
@@ -87,8 +91,10 @@ class Controller(QObject):
         self.settings.setValue("landscapeFolder", self._landscape_folder)
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
+        self.settings.setValue("dataFolder", self._data_folder)
         self.settings.setValue("videoExtensions", self._video_extensions)
         self.settings.setValue("imageExtensions", self._image_extensions)
+        self.settings.setValue("dataExtensions", self._data_extensions)
         self.settings.setValue("rules", json.dumps(self._rules))
         self.settings.sync()
         self.configurationChanged.emit()
@@ -182,6 +188,17 @@ class Controller(QObject):
         self.save()
 
     @Property(str, notify=configurationChanged)
+    def dataFolder(self):
+        return self._data_folder
+
+    @dataFolder.setter
+    def dataFolder(self, value):
+        self._data_folder = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(str, notify=configurationChanged)
     def videoExtensions(self):
         return self._video_extensions
 
@@ -203,6 +220,17 @@ class Controller(QObject):
         self.checkStatusesChanged.emit()
         self.save()
 
+    @Property(str, notify=configurationChanged)
+    def dataExtensions(self):
+        return self._data_extensions
+
+    @dataExtensions.setter
+    def dataExtensions(self, value):
+        self._data_extensions = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
     @Property("QVariantList", notify=configurationChanged)
     def rules(self):
         return self._rules
@@ -219,7 +247,7 @@ class Controller(QObject):
         self._run_state = ""
         self.runStateChanged.emit()
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
-                               self._video_extensions, self._image_extensions])
+                               self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -297,7 +325,7 @@ class Controller(QObject):
         rules = self._rules if index == -1 else [{"id": self._rules[index]["id"], "enabled": True}]
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
-                     "--controlled"]
+                     self._data_folder, self._data_extensions, "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -390,7 +418,8 @@ class MainWindow(QMainWindow):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.folder_fields = {}
         for name, label in (("landscapeFolder", self.tr("Landscape folder name")),
-                            ("videoFolder", self.tr("Video folder")), ("imageFolder", self.tr("Image folder"))):
+                            ("videoFolder", self.tr("Video folder")), ("imageFolder", self.tr("Image folder")),
+                            ("dataFolder", self.tr("Data"))):
             field = QLineEdit(getattr(controller, name))
             field.setObjectName(name)
             field.setAccessibleName(label)
@@ -414,7 +443,8 @@ class MainWindow(QMainWindow):
         files_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.file_fields = {}
         for name, text in (("videoExtensions", self.tr("Video file extensions (separated by semicolons)")),
-                           ("imageExtensions", self.tr("Image file extensions (separated by semicolons)"))):
+                           ("imageExtensions", self.tr("Image file extensions (separated by semicolons)")),
+                           ("dataExtensions", self.tr("Data file extensions (separated by semicolons)"))):
             field = QLineEdit(getattr(controller, name))
             field.setObjectName(name)
             field.setAccessibleName(text)
@@ -496,7 +526,7 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import check_rule
         status = check_rule(Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
-                            Path(get_platform_dir()) / "ffprobe.exe")
+                            sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe")
         print(f"Check: {sys.argv[3]} {status}", flush=True)
         return 0
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
@@ -504,10 +534,10 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[9:] else None
+        control = RunControl() if "--controlled" in sys.argv[11:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
-                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[9:])
+                sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[11:])
         return 2 if control is not None and control.stopped else 0
     controller = Controller(sys.argv[1] if len(sys.argv) > 1 else None)
     if controller.theme:
