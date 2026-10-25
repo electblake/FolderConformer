@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-25
+
 ### Fixed
 
 - Skip failed orientation checks for media with unusable ffprobe results, including zero or missing dimensions, instead of aborting the batch. H2 and B7 log the affected path and reason, leave that file in place for the rule, and continue processing. Read-only orientation checks report BAD for these files.

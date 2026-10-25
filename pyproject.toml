@@ -1,6 +1,6 @@
 [project]
 name = "folderconformer"
-version = "0.10.1"
+version = "0.10.2"
 description = "Organize a folder with ordered media and extension rules."
 requires-python = ">=3.12"
 license = "MIT"
