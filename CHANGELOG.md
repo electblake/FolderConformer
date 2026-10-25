@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added an application screenshot to the README.
+
+### Changed
+
+- Moved rule behavior and configuration details into `docs/RULES.md`.
+- Rewrote the README with concise features and executable installer instructions.
+
 ## [0.11.0] - 2026-10-25
 
 ### Added
