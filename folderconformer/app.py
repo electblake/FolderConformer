@@ -76,6 +76,7 @@ class Controller(QObject):
     output = Signal(str)
     outputCleared = Signal()
     completed = Signal(int)
+    rulesCompleted = Signal()
     progress = Signal(int, int, int)
     completionSummary = Signal(str)
     explorerCompleted = Signal(int)
@@ -99,6 +100,7 @@ class Controller(QObject):
         self._run_state = ""
         self._kind = ""
         self._waiting = False
+        self._all_rules = False
         settings_path = user_config_path("FolderConformer", appauthor=False) / "FolderConformer.ini"
         self.location_settings = QSettings(str(settings_path), QSettings.Format.IniFormat)
         self.location_settings.setFallbacksEnabled(False)
@@ -518,6 +520,7 @@ class Controller(QObject):
     @Slot()
     @Slot(int)
     def start(self, index=-1):
+        self._all_rules = index == -1
         self._run_state = ""
         self._waiting = False
         self._check_statuses = {}
@@ -626,6 +629,8 @@ class Controller(QObject):
             self._run_state = "cancelled" if self._run_state == "cancelling" else "stopped" if code == 2 else ""
             self.runStateChanged.emit()
             self.completed.emit(code)
+            if self._all_rules and code == 0 and _status == QProcess.ExitStatus.NormalExit and self._run_state == "":
+                self.rulesCompleted.emit()
 
 
 class MainWindow(QMainWindow):

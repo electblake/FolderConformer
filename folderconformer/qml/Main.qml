@@ -227,13 +227,11 @@ ApplicationWindow {
 
     Connections {
         target: window.controller
-        function onCompleted(code) {
-            if (code === 0 && window.controller.runState === "") {
-                completionLoader.active = true
-                if (completionLoader.status === Loader.Ready) {
-                    completionLoader.item.show()
-                    completionLoader.item.requestActivate()
-                }
+        function onRulesCompleted() {
+            completionLoader.active = true
+            if (completionLoader.status === Loader.Ready) {
+                completionLoader.item.show()
+                completionLoader.item.requestActivate()
             }
         }
     }

@@ -27,6 +27,45 @@ APP.setApplicationName("FolderConformerTests")
 
 
 class SettingsUiTests(unittest.TestCase):
+    def test_completion_dialog_only_after_full_run_and_actions(self):
+        controller = Controller(self.temporary.name)
+        controller._rules = [{"id": "create_empty_file", "enabled": True}]
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        controller.start(0)
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertIsNone(window.findChild(QObject, "conformingCompleteDialog"))
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertIsNone(window.findChild(QObject, "conformingCompleteDialog"))
+        controller.start()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        dialog = window.findChild(QObject, "conformingCompleteDialog")
+        self.assertTrue(dialog.property("visible"))
+        quits = []
+        window.quitRequested.connect(lambda: quits.append(True))
+        with patch("folderconformer.app.QDesktopServices.openUrl") as opened:
+            QMetaObject.invokeMethod(dialog.findChild(QObject, "completionOpenFolder"), "clicked")
+            self.assertEqual(Path(opened.call_args.args[0].toLocalFile()), Path(self.temporary.name))
+            self.assertTrue(dialog.property("visible"))
+            QMetaObject.invokeMethod(dialog.findChild(QObject, "completionOpenFolderAndQuit"), "clicked")
+            self.assertEqual(opened.call_count, 2)
+            self.assertEqual(len(quits), 1)
+        QMetaObject.invokeMethod(dialog.findChild(QObject, "completionQuit"), "clicked")
+        self.assertEqual(len(quits), 2)
+        QMetaObject.invokeMethod(dialog.findChild(QObject, "completionClose"), "clicked")
+        self.assertFalse(dialog.property("visible"))
+        controller.start()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertTrue(dialog.property("visible"))
+        window.close()
+        self.assertFalse(dialog.property("visible"))
+
     def test_parallel_image_worker_pause_resume_stop_and_cancel(self):
         for action in ("resume", "stop", "cancel"):
             with self.subTest(action=action):
