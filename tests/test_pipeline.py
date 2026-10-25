@@ -805,12 +805,16 @@ class PipelineTests(unittest.TestCase):
         for name in ("a", "b", "c"):
             self.assertEqual((self.folder / name / "note.txt").read_text(), name)
 
-    def test_corrupt_media_fails(self):
+    def test_corrupt_media_is_skipped_and_batch_continues(self):
         (self.folder / "photo").mkdir()
+        self.media("photo/a_wide.png")
         (self.folder / "photo/bad.png").write_bytes(b"invalid")
-        with self.assertRaises(ZeroDivisionError):
-            self.run_rules([{"id": "landscape_images", "enabled": True}])
-        self.assertTrue((self.folder / "photo/bad.png").is_file())
+        self.media("photo/z_wide.png")
+        self.run_rules([{"id": "landscape_images", "enabled": True}])
+        self.assertEqual((self.folder / "photo/bad.png").read_bytes(), b"invalid")
+        for name in ("a_wide.png", "z_wide.png"):
+            self.assertTrue((self.folder / "photo/Landscape-FULL" / name).is_file())
+            self.assertFalse((self.folder / "photo" / name).exists())
 
     def test_display_aspect_ratio_and_rotation(self):
         anamorphic = self.media("anamorphic.mp4", "40x80", "-vf", "setsar=4/1")

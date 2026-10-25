@@ -10,6 +10,11 @@ from threading import Lock
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES
 from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS, MusicAnalysis, report, worker_results
 
+
+class MediaProbeError(ValueError):
+    """The selected media stream has no usable orientation metadata."""
+
+
 class RunControl:
     def __init__(self):
         self.stopped = False
@@ -25,14 +30,27 @@ class RunControl:
 
 
 def is_landscape(path: Path, ffprobe: Path) -> bool:
-    result = subprocess.run(
-        [str(ffprobe), "-v", "error", "-select_streams", "v:0",
-         "-show_streams", "-of", "json", str(path)],
-        check=True, stdout=subprocess.PIPE, text=True, encoding="utf-8",
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-    stream = json.loads(result.stdout)["streams"][0]
-    ratio = Fraction(stream["width"], stream["height"])
+    try:
+        result = subprocess.run(
+            [str(ffprobe), "-v", "error", "-select_streams", "v:0",
+             "-show_streams", "-of", "json", str(path)],
+            check=True, stdout=subprocess.PIPE, text=True, encoding="utf-8",
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except subprocess.CalledProcessError as error:
+        raise MediaProbeError(f"ffprobe exited with code {error.returncode}") from error
+    try:
+        metadata = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise MediaProbeError("ffprobe returned invalid JSON") from error
+    streams = metadata.get("streams") if isinstance(metadata, dict) else None
+    if not isinstance(streams, list) or not streams or not isinstance(streams[0], dict):
+        raise MediaProbeError("ffprobe returned no usable video stream")
+    stream = streams[0]
+    width, height = stream.get("width"), stream.get("height")
+    if type(width) is not int or type(height) is not int or width <= 0 or height <= 0:
+        raise MediaProbeError(f"invalid dimensions: width={width!r}, height={height!r}")
+    ratio = Fraction(width, height)
     sar = stream.get("sample_aspect_ratio", "N/A")
     if sar not in ("N/A", "0:1"):
         ratio *= Fraction(sar.replace(":", "/"))
@@ -217,7 +235,12 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                 return "BAD"
         with os.scandir(target) as entries:
             for entry in entries:
-                return "OK" if is_landscape(Path(entry.path), ffprobe) else "BAD"
+                path = Path(entry.path)
+                try:
+                    return "OK" if is_landscape(path, ffprobe) else "BAD"
+                except MediaProbeError as error:
+                    report(f"[{RULE_IDENTIFIERS[rule_id]}] Warning: cannot determine orientation for {path}: {error}")
+                    return "BAD"
         return "BAD"
     return "BAD" if bad else "OK"
 
@@ -462,8 +485,14 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
             if not rule["enabled"]:
                 continue
             if rule["id"] in ("landscape", "landscape_images"):
-                if source.suffix.lstrip(".").lower() in suffixes and is_landscape(source, ffprobe):
-                    destination /= landscape_folder
+                if source.suffix.lstrip(".").lower() in suffixes:
+                    try:
+                        landscape = is_landscape(source, ffprobe)
+                    except MediaProbeError as error:
+                        report(f"[{RULE_IDENTIFIERS[rule['id']]}] Warning: skipped orientation check for {source}: {error}")
+                        continue
+                    if landscape:
+                        destination /= landscape_folder
             elif rule["id"] == "music_videos":
                 if source.suffix.lstrip(".").lower() in suffixes:
                     result = music_analysis(source)
