@@ -470,7 +470,7 @@ class SettingsUiTests(unittest.TestCase):
         controller.landscapeFolder = "Wide"
         self.assertEqual(controller.checkStatuses, {})
 
-    def test_failed_check_clears_previous_result_and_surfaces_worker_failure(self):
+    def test_invalid_media_check_reports_bad_and_logs_warning(self):
         folder = Path(self.temporary.name) / "media"
         (folder / "photo" / "Landscape-FULL").mkdir(parents=True)
         controller = Controller(str(folder))
@@ -482,10 +482,32 @@ class SettingsUiTests(unittest.TestCase):
         controller.output.connect(output.append)
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        self.assertIn("[B7] Warning: cannot determine orientation", "".join(output))
+        self.assertIn("broken.png", "".join(output))
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
+        self.assertEqual((folder / "photo" / "Landscape-FULL" / "broken.png").read_text(), "invalid image")
+        (folder / "photo" / "Landscape-FULL" / "broken.png").unlink()
+        controller.checkRule("landscape_images")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
+
+    def test_failed_check_clears_previous_result_and_surfaces_worker_failure(self):
+        folder = Path(self.temporary.name) / "media"
+        folder.mkdir()
+        controller = Controller(str(folder))
+        controller.checkRule("landscape_images")
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")
+        folder.rmdir()
+        output = []
+        controller.output.connect(output.append)
+        controller.checkRule("landscape_images")
+        self.assertTrue(controller.process.waitForFinished(10000))
         self.assertNotEqual(controller.process.exitCode(), 0)
         self.assertIn("Traceback (most recent call last):", "".join(output))
         self.assertEqual(controller.checkStatuses["landscape_images"], "ERR")
-        (folder / "photo" / "Landscape-FULL" / "broken.png").unlink()
+        folder.mkdir()
         controller.checkRule("landscape_images")
         self.assertTrue(controller.process.waitForFinished(10000))
         self.assertEqual(controller.checkStatuses["landscape_images"], "BAD")

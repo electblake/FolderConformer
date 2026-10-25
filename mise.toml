@@ -6,6 +6,7 @@ uv = "latest"
 [env]
 '_'.file = { path = ".env" }
 UV_LINK_MODE="copy"
+PYTHONIOENCODING="utf-8"
 
 [tasks.run]
 description = "Start FolderConformer"
