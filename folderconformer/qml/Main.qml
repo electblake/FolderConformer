@@ -43,6 +43,8 @@ ApplicationWindow {
             updateLoader.item.close()
         if (installExplorerLoader.status === Loader.Ready)
             installExplorerLoader.item.close()
+        if (completionLoader.status === Loader.Ready)
+            completionLoader.item.close()
     }
 
     menuBar: MenuBar {
@@ -205,6 +207,32 @@ ApplicationWindow {
                 onInstallRequested: {
                     window.pending_installer = window.controller.updates.installerPath
                     window.quitRequested()
+                }
+            }
+        }
+    }
+
+    Loader {
+        id: completionLoader
+        active: false
+        sourceComponent: Component {
+            ConformingComplete {
+                controller: window.controller
+                transientParent: window
+                palette: window.palette
+                onQuitRequested: window.quitRequested()
+            }
+        }
+    }
+
+    Connections {
+        target: window.controller
+        function onCompleted(code) {
+            if (code === 0 && window.controller.runState === "") {
+                completionLoader.active = true
+                if (completionLoader.status === Loader.Ready) {
+                    completionLoader.item.show()
+                    completionLoader.item.requestActivate()
                 }
             }
         }
