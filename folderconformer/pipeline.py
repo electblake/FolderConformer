@@ -146,10 +146,10 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
                landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES,
                empty_file_name=".forceGallery", music_threads=1, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
+    allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     if rule_id == "create_empty_file":
         return "OK" if (folder / empty_file_name).is_file() else "BAD"
     if rule_id == "extension":
-        allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
         with os.scandir(folder) as entries:
             bad = any(entry.is_file() and entry.name.casefold() not in allowed for entry in entries)
     elif rule_id in ("rename_images", "rename_videos"):
@@ -172,7 +172,7 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                 return "OK"
             for entry in entries:
                 path = Path(entry.path)
-                if entry.is_file() and path.suffix.lstrip(".").lower() in suffixes \
+                if entry.is_file() and entry.name.casefold() not in allowed and path.suffix.lstrip(".").lower() in suffixes \
                         and (rule_id != "data_extensions" or path.parent != destination):
                     return "BAD"
                 if entry.is_dir(follow_symlinks=False) and path != destination and entry.name.lower() in suffixes:
@@ -222,7 +222,8 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         suffixes = {value.strip().lstrip(".").lower() for value in video_extensions.split(";") if value.strip()}
         with os.scandir(folder / video_folder) as entries:
             files = sorted(Path(entry.path) for entry in entries
-                           if entry.is_file() and Path(entry.name).suffix.lstrip(".").lower() in suffixes)
+                           if entry.is_file() and Path(entry.name).suffix.lstrip(".").lower() in suffixes
+                           and ((folder / video_folder).resolve() != folder.resolve() or entry.name.casefold() not in allowed))
         with worker_results(MusicAnalysis(audio_classes, ffprobe), files, music_threads) as results:
             for path, result in results:
                 if result.contains_music:
@@ -286,6 +287,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
             music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, empty_file_name=".forceGallery",
             worker_threads=DEFAULT_WORKER_THREADS, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
+    allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for rule_id, group in groupby(enabled_rules, key=lambda rule: rule["id"]):
@@ -296,7 +298,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             extensions = image_extensions if rule_id == "landscape_images" else video_extensions
             processed, moved = conform_files(source_folder, list(group), landscape_folder, ffprobe, extensions,
                                             control, enumerate_conflicts, music_folder, audio_classes,
-                                            worker_threads[rule_id] if rule_id != "extension" else 1, extension_allowed_files)
+                                            worker_threads[rule_id] if rule_id != "extension" else 1,
+                                            extension_allowed_files if source_folder.resolve() == folder.resolve() else "")
             files_processed += processed
             files_moved += moved
             if control is not None and control.stopped:
@@ -312,7 +315,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                 report(f"[1/1] [{identifier}] Created empty file: {empty_file_name}", flush=True)
                 continue
             if rule["id"] == "video_extensions":
-                files = video_files(folder, video_folder, video_extensions)
+                files = [path for path in video_files(folder, video_folder, video_extensions)
+                         if path.parent != folder or path.name.casefold() not in allowed]
                 destination = folder / video_folder
                 for index, source in enumerate(files, 1):
                     if control is not None and not control.checkpoint():
@@ -335,7 +339,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     break
                 continue
             if rule["id"] == "photo_extensions":
-                files = image_files(folder, image_folder, image_extensions)
+                files = [path for path in image_files(folder, image_folder, image_extensions)
+                         if path.parent != folder or path.name.casefold() not in allowed]
                 destination = folder / image_folder
                 for index, source in enumerate(files, 1):
                     if control is not None and not control.checkpoint():
@@ -358,7 +363,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     break
                 continue
             if rule["id"] == "data_extensions":
-                files = data_files(folder, data_folder, data_extensions)
+                files = [path for path in data_files(folder, data_folder, data_extensions)
+                         if path.parent != folder or path.name.casefold() not in allowed]
                 destination = folder / data_folder
                 for index, source in enumerate(files, 1):
                     if control is not None and not control.checkpoint():
@@ -462,7 +468,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
 
 def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, extensions: str, control=None, enumerate_conflicts: bool = False,
                   music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, threads=1,
-                  extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
+                  extension_allowed_files=""):
     identifier = RULE_IDENTIFIERS[rules[0]["id"]]
     allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
@@ -470,7 +476,7 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
     report(f"[{identifier}] Scanning {folder}", flush=True)
     with os.scandir(folder) as entries:
         for checked, entry in enumerate(entries, 1):
-            if entry.is_file():
+            if entry.is_file() and entry.name.casefold() not in allowed:
                 files.append(Path(entry.path))
             if checked % 500 == 0:
                 report(f"[{identifier}] Scanning: {checked} entries checked, {len(files)} files found", flush=True)

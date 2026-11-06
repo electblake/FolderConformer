@@ -209,7 +209,7 @@ class SettingsUiTests(unittest.TestCase):
             self.assertTrue(dialog.isVisible())
             self.assertEqual(dialog.property("searchQuery"), identifier)
             self.assertEqual(dialog.findChild(QObject, "settingsSearch").property("text"), identifier)
-            if identifier in ("E1", "N4"):
+            if identifier == "E1":
                 self.assertTrue(dialog.findChild(QObject, "rulesSettingsPage").property("visible"))
                 field_name = "create_empty_fileFileName" if identifier == "E1" else "extensionAllowedFiles"
                 self.assertTrue(dialog.findChild(QObject, field_name).property("visible"))
@@ -222,7 +222,7 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(messages, [])
         window.close()
 
-    def test_n4_allowed_setting_persists_searches_and_reaches_workers(self):
+    def test_allowed_files_setting_persists_searches_and_reaches_workers(self):
         controller = Controller(self.temporary.name)
         self.assertEqual(controller.extensionAllowedFiles, ".forceGallery;folder.jpg;folder.png;folder.jpeg;")
         controller._rules = [{"id": "extension", "enabled": True}]
@@ -237,9 +237,11 @@ class SettingsUiTests(unittest.TestCase):
         dialog.show()
         self.assertIsNone(dialog.findChild(QObject, "nonImageIgnoredFilenames"))
         search = dialog.findChild(QObject, "settingsSearch")
-        search.setProperty("text", "N4")
+        search.setProperty("text", "Allowed files")
         field = dialog.findChild(QObject, "extensionAllowedFiles")
         self.assertTrue(field.property("visible"))
+        self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
+        self.assertFalse(dialog.findChild(QObject, "rulesSettingsGroup").property("visible"))
         self.assertEqual(field.property("placeholderText"), ".forceGallery;folder.jpg;folder.png;folder.jpeg;")
         self.assertFalse(dialog.findChild(QObject, "create_empty_fileFileName").property("visible"))
         search.setProperty("text", "full filenames")

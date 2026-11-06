@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-06
+
+### Fixed
+
+- Moved Allowed files to File Settings > Files and shared its saved list across N4, J1, S6, and R3 so allowed root files remain in place during collection as well as extension grouping.
+- Applied the same root-file protection to H2, B7, and M5 when their media folder is configured as the project root, without exempting same-named files in subfolders.
+
 ## [0.12.2] - 2026-11-06
 
 ### Added

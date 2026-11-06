@@ -27,6 +27,68 @@ FOLDER_FILES = ("video/", "photo/",
 
 
 class PipelineTests(unittest.TestCase):
+    def test_allowed_root_files_apply_to_image_video_and_data_collection(self):
+        for rule_id, destination, extension, name in (
+            ("photo_extensions", "photo", "jpg", "folder.jpg"),
+            ("video_extensions", "video", "mp4", "keep.mp4"),
+            ("data_extensions", "Data", "csv", "keep.csv"),
+        ):
+            with self.subTest(rule=rule_id):
+                root = self.folder / rule_id
+                root.mkdir()
+                (root / name).write_text("root")
+                allowed = " " + name.upper() + ";;"
+                self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide",
+                                            extension_allowed_files=allowed), "OK")
+                (root / extension).mkdir()
+                (root / extension / name).write_text("nested")
+                (root / ("move." + extension)).write_text("move")
+                self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide",
+                                            extension_allowed_files=allowed), "BAD")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    conform(root, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
+                            *FOLDER_FILES, extension_allowed_files=allowed)
+                self.assertEqual((root / name).read_text(), "root")
+                self.assertEqual((root / destination / name).read_text(), "nested")
+                self.assertEqual((root / destination / ("move." + extension)).read_text(), "move")
+                self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide",
+                                            extension_allowed_files=allowed), "OK")
+                self.assertEqual(check_rule(root, rule_id, *FOLDER_FILES, FFPROBE, "Wide",
+                                            extension_allowed_files=""), "BAD")
+
+    def test_allowed_root_files_survive_collection_and_extension_rule_sequence(self):
+        (self.folder / "folder.jpg").write_text("cover")
+        (self.folder / ".forceGallery").write_text("marker")
+        (self.folder / "photo.jpg").write_text("photo")
+        rules = [{"id": rule, "enabled": True} for rule in
+                 ("photo_extensions", "video_extensions", "data_extensions", "extension")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, rules, "Wide", FFPROBE, *FOLDER_FILES)
+        self.assertEqual((self.folder / "folder.jpg").read_text(), "cover")
+        self.assertEqual((self.folder / ".forceGallery").read_text(), "marker")
+        self.assertTrue((self.folder / "photo/photo.jpg").is_file())
+        for rule in rules:
+            self.assertEqual(check_rule(self.folder, rule["id"], *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+
+    def test_allowed_files_skip_analysis_when_media_folder_is_project_root(self):
+        for rule_id in ("landscape", "landscape_images", "music_videos"):
+            with self.subTest(rule=rule_id):
+                root = self.folder / rule_id
+                root.mkdir()
+                (root / "keep.jpg").write_text("not media")
+                with contextlib.redirect_stdout(io.StringIO()), \
+                        patch("folderconformer.pipeline.is_landscape") as orientation, \
+                        patch("folderconformer.pipeline.MusicAnalysis.__call__") as music:
+                    conform(root, [{"id": rule_id, "enabled": True}], "Wide", FFPROBE,
+                            ".", ".", "jpg", "jpg", "Data", "csv", extension_allowed_files="keep.jpg;")
+                    orientation.assert_not_called()
+                    music.assert_not_called()
+                    if rule_id == "music_videos":
+                        self.assertEqual(check_rule(root, rule_id, ".", ".", "jpg", "jpg", "Data", "csv",
+                                                    FFPROBE, "Wide", extension_allowed_files="keep.jpg;"), "OK")
+                        music.assert_not_called()
+                self.assertEqual((root / "keep.jpg").read_text(), "not media")
+
     def test_n4_allowed_files_check_and_move(self):
         for name in (".forceGallery", "keep.txt", "move.txt", "keep.txt.bak"):
             (self.folder / name).write_text(name)
