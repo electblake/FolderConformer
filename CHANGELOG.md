@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a one-third-width settings sidebar with General, Rules, and File Settings groups and live search across setting titles and tooltips.
+- Added File Rules and Folder Rules sections under Rules.
+
+### Changed
+
+- Moved existing configuration-folder and theme settings into General.
+- Moved E1's filename field into Rules > File Rules, preserving its saved value and `.forceGallery` default.
+- Moved extension lists, name-conflict handling, and destination folders into separate Files and Folders sections under File Settings, replacing the Files and Folders docks and their View menu entries.
+- Preserved existing QSettings values, live preview updates, edit restrictions, and the Audio and Performance docks.
+- Updated rule documentation and UI regression coverage for the settings layout and remaining docks.
+
 ## [0.11.1] - 2026-10-25
 
 ### Added

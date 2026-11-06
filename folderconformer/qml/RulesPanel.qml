@@ -110,15 +110,6 @@ GroupBox {
                     checked: ruleRow.modelData.enabled
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
                 }
-                TextField {
-                    objectName: ruleRow.modelData.id + "FileName"
-                    visible: ruleRow.modelData.id === "create_empty_file"
-                    Layout.preferredWidth: 180
-                    text: panel.controller.emptyFileName
-                    Accessible.name: qsTr("Filename in project root")
-                    enabled: !panel.controller.running
-                    onEditingFinished: panel.controller.emptyFileName = text
-                }
                 Button {
                     objectName: ruleRow.modelData.id + "Check"
                     text: qsTr("Check")

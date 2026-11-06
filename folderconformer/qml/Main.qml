@@ -17,10 +17,6 @@ ApplicationWindow {
     property bool performanceVisible: true
     signal performanceToggled(bool visible)
     property bool choosingFolder: false
-    property bool foldersVisible: true
-    signal foldersToggled(bool visible)
-    property bool filesVisible: true
-    signal filesToggled(bool visible)
     property bool audioVisible: true
     signal audioToggled(bool visible)
     signal resetLayoutRequested()
@@ -98,20 +94,6 @@ ApplicationWindow {
                 checkable: true
                 checked: window.performanceVisible
                 onTriggered: window.performanceToggled(!window.performanceVisible)
-            }
-            MenuItem {
-                objectName: "foldersMenu"
-                text: qsTr("&Folders")
-                checkable: true
-                checked: window.foldersVisible
-                onTriggered: window.foldersToggled(!window.foldersVisible)
-            }
-            MenuItem {
-                objectName: "filesMenu"
-                text: qsTr("F&iles")
-                checkable: true
-                checked: window.filesVisible
-                onTriggered: window.filesToggled(!window.filesVisible)
             }
             MenuItem {
                 objectName: "audioMenu"

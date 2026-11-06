@@ -6,7 +6,7 @@ Select a folder, enable the desired rules, use **Move up / Move down** to set th
 
 Each rule has a permanent letter–number identifier. Identifiers stay with their rules across reordering and restarts; they do not indicate execution order.
 
-Each rule runs at its position in the list. H2 and B7 organize files inside their respective media folders; N4 only groups input-root files by extension. Run J1/S6 before B7/H2 to collect loose media before sorting it by aspect ratio. Disabled rules do not run. Existing same-name files are never replaced. In the Files dock, enable **Resolve name conflicts** to use the first available numbered name before the extension, such as `photo_1.jpg`. This checkbox is saved and defaults to unchecked: conflicting files stay in their source location, are logged as skipped, and processing continues. Other failures remain visible in the log.
+Each rule runs at its position in the list. H2 and B7 organize files inside their respective media folders; N4 only groups input-root files by extension. Run J1/S6 before B7/H2 to collect loose media before sorting it by aspect ratio. Disabled rules do not run. Existing same-name files are never replaced. In **File > Settings > File Settings > Files**, enable **Resolve name conflicts** to use the first available numbered name before the extension, such as `photo_1.jpg`. This checkbox is saved and defaults to unchecked: conflicting files stay in their source location, are logged as skipped, and processing continues. Other failures remain visible in the log.
 
 ## Media folders, extensions, and empty directories
 
@@ -34,7 +34,7 @@ All four rules support Check and Run Once and use the existing name-conflict set
 
 ## Empty-file creation
 
-**E1 — Create empty file:** create the inline filename (default `.forceGallery`) in the selected project root. Existing file contents are preserved. The rule defaults to off and supports Check, Run Once, saved ordering, and filename persistence. Place it after extension grouping to keep the marker at the root.
+**E1 — Create empty file:** create the filename configured in **File > Settings > Rules > File Rules** (default `.forceGallery`) in the selected project root. Existing file contents are preserved. The rule defaults to off and supports Check, Run Once, saved ordering, and filename persistence. Place it after extension grouping to keep the marker at the root.
 
 ## Checks
 
@@ -42,9 +42,11 @@ All four rules support Check and Run Once and use the existing name-conflict set
 
 ## Configuration
 
-The native **Folders** dock on the right contains the landscape destination (default `Landscape-FULL`), video destination (default `video/`), image destination (default `photo/`), and Data destination (default `Data/`). Drag its title bar to dock it on another side or float it in a separate window. Use **View > Folders** to hide or reopen it. Folder rules use the configured destinations. The native **Files** dock starts below Folders on the right and contains semicolon-separated video, image, and data extension lists used to match extension folders. It can also be moved or floated; use **View > Files** to hide or reopen it. **View > Reset Layout** restores both docks on the right, with Files below Folders, and reopens any closed dock. The defaults are the lists above; add `gif` to the image list to include GIF folders. Matching ignores case, surrounding whitespace, and leading dots.
+**File > Settings** has General, Rules, and File Settings groups in its left sidebar. Search matches setting titles and tooltips, hiding nonmatching settings and groups.
 
-The input folder, destination folders, extension lists, all rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows). The main window geometry and both docks' positions, sizes, floating state, and visibility are saved on close or Restart & Apply and restored on the next launch using Qt's built-in state APIs. In **File > Settings > Data**, browse for a different configuration folder or edit its path and finish editing to save the current settings there. The default configuration file remembers that location for future launches. **Open** opens the selected configuration folder.
+Under **File Settings**, the **Folders** section contains the landscape destination (default `Landscape-FULL`), Music Video folder (default `with-music`), video destination (default `video/`), image destination (default `photo/`), and Data destination (default `Data/`). Folder rules use these configured destinations. The **Files** section contains semicolon-separated video, image, and data extension lists and **Resolve name conflicts**. The defaults are the lists above; add `gif` to the image list to include GIF folders. Matching ignores case, surrounding whitespace, and leading dots.
+
+The input folder, destination folders, extension lists, all rule toggles and rule order save automatically using QSettings in the platformdirs user configuration directory (`%LOCALAPPDATA%/FolderConformer/FolderConformer.ini` on Windows). The main window geometry and remaining docks' positions, sizes, floating state, and visibility are saved on close or Restart & Apply and restored on the next launch using Qt's built-in state APIs. In **File > Settings > General > Data**, browse for a different configuration folder or edit its path and finish editing to save the current settings there. The default configuration file remembers that location for future launches. **Open** opens the selected configuration folder.
 
 ## Performance and activity
 
@@ -58,7 +60,7 @@ The activity window retains at most 1,000 lines and 100,000 characters, with upd
 
 **M5 — Move videos containing music** analyzes every audio track and channel of matching videos directly inside the configured video folder using Google's pretrained YAMNet 1. Music-positive files move into its **Music Video folder**, default `video/with-music/`. Photos, input-root files, and nested folders are outside this rule. Files without audio remain in place. Decoder/model failures stop the worker and appear in the activity log.
 
-The **Audio** dock starts below Files on the right. Type a class name and select an autocomplete result, then Add it. Each selected class has its own minimum score and Remove button. The list comes from the installed YAMNet class map (all 521 classes). Music, Singing, and Humming are selected by default, each at `0.504`; selections and scores persist in QSettings. Any selected class reaching its score triggers the rule; an empty selection matches nothing. Thresholds are app post-processing, and lower values match more readily. The score is not a probability of correctness. Folder names belong in Folders, while extensions and conflict handling stay in Files. Audio supports View-menu visibility, dragging/floating, saved layouts, and Reset Layout.
+The **Audio** dock starts on the right. Type a class name and select an autocomplete result, then Add it. Each selected class has its own minimum score and Remove button. The list comes from the installed YAMNet class map (all 521 classes). Music, Singing, and Humming are selected by default, each at `0.504`; selections and scores persist in QSettings. Any selected class reaching its score triggers the rule; an empty selection matches nothing. Thresholds are app post-processing, and lower values match more readily. The score is not a probability of correctness. Folder names, extensions, and conflict handling are configured under **File > Settings > File Settings**. Audio supports View-menu visibility, dragging/floating, saved layouts, and Reset Layout.
 
 Check runs the actual classifier without moving anything. BAD means a music-positive file remains eligible to move, including a name conflict; OK means no work remains. Run Once and Execute rules perform real moves using the existing conflict setting. Pause/Stop is acknowledged between bounded audio batches; stopping leaves the current video unmoved. Cancel terminates the worker.
 

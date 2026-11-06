@@ -14,13 +14,13 @@ from pathlib import Path
 import qt_themes
 from platformdirs import user_config_path, user_log_path
 from static_ffmpeg.run import get_platform_dir
-from PySide6.QtCore import QElapsedTimer, QEvent, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QRegularExpression, QSettings, QStringListModel, Qt, QTimer, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QRegularExpressionValidator, QStandardItem, QStandardItemModel
+from PySide6.QtCore import QElapsedTimer, QEvent, QMetaObject, QObject, Property, QProcess, QProcessEnvironment, QSettings, QStringListModel, Qt, QTimer, QUrl, Signal, Slot, QtMsgType, qInstallMessageHandler
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QIcon, QPalette, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine, QQmlEngine, QQmlProperty
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtQuickWidgets import QQuickWidget
 from PySide6.QtQuickControls2 import QQuickStyle
-from PySide6.QtWidgets import QApplication, QCheckBox, QCompleter, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QSpinBox, QStyle, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QDialogButtonBox, QDockWidget, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QSpinBox, QStyle, QVBoxLayout, QWidget
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates, install_after_exit
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MODEL_PATH, MUSIC_THRESHOLD
@@ -643,7 +643,7 @@ class MainWindow(QMainWindow):
         self.menu_actions = []
         for title, items in (
             ("&File", ("selectFolderMenu", "settingsMenu", None, "quitMenu")),
-            ("&View", ("inputFolderMenu", "previewMenu", "performanceMenu", "foldersMenu", "filesMenu", "audioMenu", None, "resetLayoutMenu")),
+            ("&View", ("inputFolderMenu", "previewMenu", "performanceMenu", "audioMenu", None, "resetLayoutMenu")),
             ("&Help", ("aboutMenu", "checkForUpdatesMenu", "installExplorerMenu")),
         ):
             menu = self.menuBar().addMenu(self.tr(title))
@@ -745,65 +745,6 @@ class MainWindow(QMainWindow):
         self.performance_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("performanceVisible", visible))
         quick_window.performanceToggled.connect(self.performance_dock.setVisible)
         controller.configurationChanged.connect(self.sync_performance)
-        self.folders_dock = QDockWidget(self.tr("Folders"), self)
-        self.folders_dock.setObjectName("foldersDock")
-        contents = QWidget()
-        form = QFormLayout(contents)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        self.folder_fields = {}
-        for name, label in (("landscapeFolder", self.tr("Landscape folder name")),
-                            ("musicVideoFolder", self.tr("Music Video folder")),
-                            ("videoFolder", self.tr("Video folder")), ("imageFolder", self.tr("Image folder")),
-                            ("dataFolder", self.tr("Data"))):
-            field = QLineEdit(getattr(controller, name))
-            field.setObjectName(name)
-            field.setAccessibleName(label)
-            field.textEdited.connect(lambda text, key=name: setattr(controller, key, text))
-            form.addRow(label, field)
-            self.folder_fields[name] = field
-        self.folder_fields["landscapeFolder"].setValidator(QRegularExpressionValidator(
-            QRegularExpression(r'[^<>:"/\\|?*.][^<>:"/\\|?*]*'), self))
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(contents)
-        self.folders_dock.setWidget(scroll)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.folders_dock)
-        self.resizeDocks([self.folders_dock], [260], Qt.Orientation.Horizontal)
-        self.folders_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("foldersVisible", visible))
-        quick_window.foldersToggled.connect(self.folders_dock.setVisible)
-        self.files_dock = QDockWidget(self.tr("Files"), self)
-        self.files_dock.setObjectName("filesDock")
-        files_contents = QWidget()
-        files_form = QFormLayout(files_contents)
-        files_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
-        self.file_fields = {}
-        for name, text in (("videoExtensions", self.tr("Video file extensions")),
-                           ("imageExtensions", self.tr("Image file extensions")),
-                           ("dataExtensions", self.tr("Data file extensions"))):
-            field = QLineEdit(getattr(controller, name))
-            field.setObjectName(name)
-            field.setAccessibleName(text)
-            field.setToolTip(self.tr("Separate extensions with semicolons."))
-            field.textEdited.connect(lambda value, key=name: setattr(controller, key, value))
-            label = QLabel(text)
-            label.setToolTip(field.toolTip())
-            label.setWordWrap(True)
-            label.setBuddy(field)
-            files_form.addRow(label, field)
-            self.file_fields[name] = field
-        self.enumerate_conflicts = QCheckBox(self.tr("Resolve name conflicts"))
-        self.enumerate_conflicts.setObjectName("enumerateConflicts")
-        self.enumerate_conflicts.setToolTip(self.tr("Number conflicting names with _1, _2, … When unchecked, skip files whose destination name already exists."))
-        self.enumerate_conflicts.setChecked(controller.enumerateConflicts)
-        self.enumerate_conflicts.clicked.connect(lambda checked: setattr(controller, "enumerateConflicts", checked))
-        files_form.addRow(self.enumerate_conflicts)
-        files_scroll = QScrollArea()
-        files_scroll.setWidgetResizable(True)
-        files_scroll.setWidget(files_contents)
-        self.files_dock.setWidget(files_scroll)
-        self.splitDockWidget(self.folders_dock, self.files_dock, Qt.Orientation.Vertical)
-        self.files_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("filesVisible", visible))
-        quick_window.filesToggled.connect(self.files_dock.setVisible)
         self.audio_dock = QDockWidget(self.tr("Audio"), self)
         self.audio_dock.setObjectName("audioDock")
         audio_contents = QWidget()
@@ -839,12 +780,11 @@ class MainWindow(QMainWindow):
         audio_scroll.setWidgetResizable(True)
         audio_scroll.setWidget(audio_contents)
         self.audio_dock.setWidget(audio_scroll)
-        self.splitDockWidget(self.files_dock, self.audio_dock, Qt.Orientation.Vertical)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.audio_dock)
+        self.resizeDocks([self.audio_dock], [260], Qt.Orientation.Horizontal)
         self.audio_dock.visibilityChanged.connect(lambda visible: quick_window.setProperty("audioVisible", visible))
         quick_window.audioToggled.connect(self.audio_dock.setVisible)
         controller.configurationChanged.connect(self.sync_audio)
-        controller.configurationChanged.connect(self.sync_folders)
-        controller.configurationChanged.connect(self.sync_files)
         controller.runningChanged.connect(self.sync_enabled)
         controller.updates.changed.connect(self.sync_enabled)
         quick_window.quitRequested.connect(self.close)
@@ -901,18 +841,10 @@ class MainWindow(QMainWindow):
         if self.input_folder.text() != self.controller.folder:
             self.input_folder.setText(self.controller.folder)
 
-    def sync_folders(self):
-        for name, field in self.folder_fields.items():
-            value = getattr(self.controller, name)
-            if field.text() != value:
-                field.setText(value)
-
     def sync_enabled(self):
         for action, item in self.menu_actions:
             action.setEnabled(item.property("enabled"))
         self.input_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
-        self.folders_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
-        self.files_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.audio_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
         self.performance_dock.widget().setEnabled(not self.controller.running and not self.controller.updates.busy)
 
@@ -975,13 +907,6 @@ class MainWindow(QMainWindow):
             spin.blockSignals(False)
         self.sync_audio_add()
 
-    def sync_files(self):
-        self.enumerate_conflicts.setChecked(self.controller.enumerateConflicts)
-        for name, field in self.file_fields.items():
-            value = getattr(self.controller, name)
-            if field.text() != value:
-                field.setText(value)
-
     def closeEvent(self, event):
         if self.controller.running or self.controller.updates.busy:
             event.ignore()
@@ -993,8 +918,6 @@ class MainWindow(QMainWindow):
         self.input_dock.close()
         self.preview_dock.close()
         self.performance_dock.close()
-        self.folders_dock.close()
-        self.files_dock.close()
         self.audio_dock.close()
         super().closeEvent(event)
 
