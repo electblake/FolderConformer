@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Center the completion dialog over the app window each time it opens, including after the app window has moved.
+
 ## [0.12.4] - 2026-11-06
 
 ### Fixed

@@ -15,8 +15,11 @@ ApplicationWindow {
     height: content.implicitHeight + 48
     minimumHeight: content.implicitHeight + 48
     onVisibleChanged: {
-        if (visible)
+        if (visible) {
+            x = transientParent.x + Math.round((transientParent.width - width) / 2)
+            y = transientParent.y + Math.round((transientParent.height - height) / 2)
             closeButton.forceActiveFocus()
+        }
     }
 
     ColumnLayout {
