@@ -189,6 +189,33 @@ class SettingsUiTests(unittest.TestCase):
         self.assertEqual(messages, [])
         window.close()
 
+    def test_shared_allowed_files_rule_settings_navigation(self):
+        controller = Controller(self.temporary.name)
+        engine = QQmlApplicationEngine()
+        engine.addImageProvider("standard", StandardIconProvider())
+        messages = []
+        engine.warnings.connect(lambda warnings: messages.extend(warning.toString() for warning in warnings))
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
+        window = engine.rootObjects()[0]
+        QTest.qWait(100)
+        for rule_id, identifier in (("photo_extensions", "J1"), ("video_extensions", "S6"),
+                                    ("extension", "N4"), ("data_extensions", "R3")):
+            with self.subTest(rule=identifier):
+                QMetaObject.invokeMethod(self.rule_control(window, rule_id + "Settings"), "clicked")
+                APP.processEvents()
+                dialog = window.findChild(QQuickWindow, "settingsDialog")
+                self.assertTrue(dialog.isVisible())
+                self.assertEqual(dialog.property("searchQuery"), identifier)
+                self.assertIn(identifier, dialog.property("allowedFilesTooltip"))
+                self.assertTrue(dialog.findChild(QObject, "fileSettingsGroup").property("visible"))
+                self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
+                self.assertTrue(dialog.findChild(QObject, "extensionAllowedFiles").property("visible"))
+                self.assertFalse(dialog.findChild(QObject, "noMatchingSettings").property("visible"))
+                dialog.close()
+        self.assertEqual(messages, [])
+        window.close()
+
     def test_rule_settings_buttons_open_filtered_dialog(self):
         controller = Controller(self.temporary.name)
         engine = QQmlApplicationEngine()
@@ -213,6 +240,9 @@ class SettingsUiTests(unittest.TestCase):
                 self.assertTrue(dialog.findChild(QObject, "rulesSettingsPage").property("visible"))
                 field_name = "create_empty_fileFileName" if identifier == "E1" else "extensionAllowedFiles"
                 self.assertTrue(dialog.findChild(QObject, field_name).property("visible"))
+            elif identifier in ("J1", "S6", "N4", "R3"):
+                self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
+                self.assertTrue(dialog.findChild(QObject, "extensionAllowedFiles").property("visible"))
             else:
                 self.assertTrue(dialog.findChild(QObject, "noMatchingSettings").property("visible"))
             dialog.close()

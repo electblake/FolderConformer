@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-11-06
+
+### Fixed
+
+- Added J1, S6, N4, and R3 to the shared Allowed files tooltip so their settings gears find the setting under File Settings through the existing rule-ID search.
+
 ## [0.12.3] - 2026-11-06
 
 ### Fixed

@@ -29,7 +29,7 @@ ApplicationWindow {
     readonly property string emptyFileTitle: qsTr("E1 — Create empty file")
     readonly property string emptyFileTooltip: qsTr("Filename in project root")
     readonly property string allowedFilesTitle: qsTr("Allowed files")
-    readonly property string allowedFilesTooltip: qsTr("Separate filenames with semicolons. Rules that move files from the project root leave these files in place. Matches full filenames, ignoring case and surrounding spaces.")
+    readonly property string allowedFilesTooltip: qsTr("J1, S6, N4, R3: leave these files in the project root. Separate full filenames with semicolons. Matching ignores case and surrounding spaces.")
     readonly property bool emptyFileMatches: matches(emptyFileTitle, emptyFileTooltip)
     readonly property bool allowedFilesMatch: matches(allowedFilesTitle, allowedFilesTooltip)
     readonly property bool rulesMatches: emptyFileMatches
