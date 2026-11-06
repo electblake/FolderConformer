@@ -27,7 +27,11 @@ ApplicationWindow {
     readonly property bool generalMatches: configMatches || themeMatches
     readonly property string emptyFileTitle: qsTr("E1 — Create empty file")
     readonly property string emptyFileTooltip: qsTr("Filename in project root")
-    readonly property bool rulesMatches: matches(emptyFileTitle, emptyFileTooltip)
+    readonly property string ignoredFilenamesTitle: qsTr("I2 - Ignored filenames")
+    readonly property string ignoredFilenamesTooltip: qsTr("Separate filenames with semicolons. I2 leaves these files in the image folder. Matches full filenames, ignoring case and surrounding spaces.")
+    readonly property bool emptyFileMatches: matches(emptyFileTitle, emptyFileTooltip)
+    readonly property bool ignoredFilenamesMatch: matches(ignoredFilenamesTitle, ignoredFilenamesTooltip)
+    readonly property bool rulesMatches: emptyFileMatches || ignoredFilenamesMatch
     readonly property string extensionsTooltip: qsTr("Separate extensions with semicolons.")
     readonly property string conflictsTitle: qsTr("Resolve name conflicts")
     readonly property string conflictsTooltip: qsTr("Number conflicting names with _1, _2, \u2026 When unchecked, skip files whose destination name already exists.")
@@ -244,9 +248,10 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             ColumnLayout {
                                 anchors.fill: parent
-                                Label { text: dialog.emptyFileTitle }
+                                Label { text: dialog.emptyFileTitle; visible: dialog.emptyFileMatches }
                                 TextField {
                                     objectName: "create_empty_fileFileName"
+                                    visible: dialog.emptyFileMatches
                                     Layout.fillWidth: true
                                     text: dialog.controller.emptyFileName
                                     placeholderText: ".forceGallery"
@@ -256,6 +261,20 @@ ApplicationWindow {
                                     enabled: !dialog.controller.running
                                     selectByMouse: true
                                     onEditingFinished: dialog.controller.emptyFileName = text
+                                }
+                                Label { text: dialog.ignoredFilenamesTitle; visible: dialog.ignoredFilenamesMatch }
+                                TextField {
+                                    objectName: "nonImageIgnoredFilenames"
+                                    Layout.fillWidth: true
+                                    visible: dialog.ignoredFilenamesMatch
+                                    text: dialog.controller.nonImageIgnoredFilenames
+                                    placeholderText: ".forceGallery;"
+                                    Accessible.name: dialog.ignoredFilenamesTitle
+                                    ToolTip.visible: hovered || activeFocus
+                                    ToolTip.text: dialog.ignoredFilenamesTooltip
+                                    enabled: !dialog.controller.running && !dialog.controller.updates.busy
+                                    selectByMouse: true
+                                    onEditingFinished: dialog.controller.nonImageIgnoredFilenames = text
                                 }
                             }
                         }

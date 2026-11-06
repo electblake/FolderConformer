@@ -145,7 +145,7 @@ def empty_directories(folder: Path):
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
                landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES,
-               empty_file_name=".forceGallery", music_threads=1):
+               empty_file_name=".forceGallery", music_threads=1, non_image_ignored_filenames=".forceGallery;"):
     if rule_id == "create_empty_file":
         return "OK" if (folder / empty_file_name).is_file() else "BAD"
     if rule_id == "extension":
@@ -203,8 +203,10 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
     elif rule_id in ("non_video_to_root", "non_image_to_root"):
         directory, extensions = (video_folder, video_extensions) if rule_id == "non_video_to_root" else (image_folder, image_extensions)
         suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
+        ignored = {name.strip().casefold() for name in non_image_ignored_filenames.split(";") if name.strip()}
         with os.scandir(folder / directory) as entries:
             bad = any(entry.is_file() and Path(entry.path).parent != folder
+                      and (rule_id != "non_image_to_root" or entry.name.casefold() not in ignored)
                       and Path(entry.name).suffix.lstrip(".").lower() not in suffixes for entry in entries)
     elif rule_id == "remove_empty_dirs":
         pending = [Path(folder)]
@@ -284,7 +286,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
             music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, empty_file_name=".forceGallery",
-            worker_threads=DEFAULT_WORKER_THREADS):
+            worker_threads=DEFAULT_WORKER_THREADS, non_image_ignored_filenames=".forceGallery;"):
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for rule_id, group in groupby(enabled_rules, key=lambda rule: rule["id"]):
@@ -398,9 +400,11 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     destination = folder
                     extensions = video_extensions if video else image_extensions
                     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
+                    ignored = {name.strip().casefold() for name in non_image_ignored_filenames.split(";") if name.strip()}
                     with os.scandir(media_folder) as entries:
                         files = [Path(entry.path) for entry in entries
                                  if entry.is_file() and Path(entry.path).parent != destination
+                                 and (rule["id"] != "non_image_to_root" or entry.name.casefold() not in ignored)
                                  and Path(entry.name).suffix.lstrip(".").lower() not in suffixes]
                 for index, source in enumerate(sorted(files), 1):
                     if control is not None and not control.checkpoint():

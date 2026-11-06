@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-06
+
+### Fixed
+
+- Preserve `.forceGallery` in the image folder when I2 moves non-image files to the root.
+- Added a saved I2 ignored-filenames setting under Rules > File Rules, defaulting to `.forceGallery;`. The semicolon-separated list matches full filenames case-insensitively and applies to Check, Check All, Run Once, and execution; an empty list disables exclusions.
+
 ## [0.12.0] - 2026-11-06
 
 ### Added

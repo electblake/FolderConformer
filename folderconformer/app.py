@@ -118,6 +118,7 @@ class Controller(QObject):
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
         self._empty_file_name = self.settings.value("emptyFileName", ".forceGallery", type=str)
+        self._non_image_ignored_filenames = self.settings.value("nonImageIgnoredFilenames", ".forceGallery;", type=str)
         self._worker_threads = json.loads(self.settings.value(
             "performance/workerThreads", json.dumps(DEFAULT_WORKER_THREADS), type=str))
         self._video_extensions = self.settings.value(
@@ -232,6 +233,7 @@ class Controller(QObject):
         self.settings.setValue("imageFolder", self._image_folder)
         self.settings.setValue("dataFolder", self._data_folder)
         self.settings.setValue("emptyFileName", self._empty_file_name)
+        self.settings.setValue("nonImageIgnoredFilenames", self._non_image_ignored_filenames)
         self.settings.setValue("performance/workerThreads", json.dumps(self._worker_threads))
         self.settings.setValue("videoExtensions", self._video_extensions)
         self.settings.setValue("imageExtensions", self._image_extensions)
@@ -310,6 +312,17 @@ class Controller(QObject):
     @emptyFileName.setter
     def emptyFileName(self, value):
         self._empty_file_name = value
+        self._check_statuses = {}
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def nonImageIgnoredFilenames(self):
+        return self._non_image_ignored_filenames
+
+    @nonImageIgnoredFilenames.setter
+    def nonImageIgnoredFilenames(self, value):
+        self._non_image_ignored_filenames = value
         self._check_statuses = {}
         self.checkStatusesChanged.emit()
         self.save()
@@ -432,7 +445,7 @@ class Controller(QObject):
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
                                self._landscape_folder, self._music_video_folder, json.dumps(self._audio_classes),
-                               self._empty_file_name, json.dumps(self._worker_threads)])
+                               self._empty_file_name, json.dumps(self._worker_threads), self._non_image_ignored_filenames])
 
     @Slot()
     def checkAll(self):
@@ -446,7 +459,7 @@ class Controller(QObject):
                                 self._image_folder, self._video_extensions, self._image_extensions,
                                 self._data_folder, self._data_extensions, self._landscape_folder,
                                 self._music_video_folder, json.dumps(self._audio_classes), self._empty_file_name,
-                                json.dumps(self._worker_threads)])
+                                json.dumps(self._worker_threads), self._non_image_ignored_filenames])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -530,7 +543,7 @@ class Controller(QObject):
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      self._data_folder, self._data_extensions, self._music_video_folder,
-                     json.dumps(self._audio_classes), self._empty_file_name, json.dumps(self._worker_threads), "--controlled"]
+                     json.dumps(self._audio_classes), self._empty_file_name, json.dumps(self._worker_threads), self._non_image_ignored_filenames, "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -941,7 +954,7 @@ def main():
         def check(rule_id):
             return check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
                               sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
-                              sys.argv[11], json.loads(sys.argv[12]), sys.argv[13], worker_threads["music_videos"])
+                              sys.argv[11], json.loads(sys.argv[12]), sys.argv[13], worker_threads["music_videos"], sys.argv[15])
         with worker_results(check, rule_ids, worker_threads["checks"]) as results:
             for rule_id, status in results:
                 report(f"Check: {rule_id} {status}", flush=True)
@@ -951,12 +964,12 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[15:] else None
+        control = RunControl() if "--controlled" in sys.argv[16:] else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[15:],
+                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[16:],
                 music_folder=sys.argv[11], audio_classes=json.loads(sys.argv[12]), empty_file_name=sys.argv[13],
-                worker_threads=json.loads(sys.argv[14]))
+                worker_threads=json.loads(sys.argv[14]), non_image_ignored_filenames=sys.argv[15])
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)
