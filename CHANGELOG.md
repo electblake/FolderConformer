@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-11-06
+
 ### Fixed
 
+- Added H2, B7, and M5 to the Allowed files tooltip, including the root-media-folder condition, so their settings gears find the shared setting.
 - Center the completion dialog over the app window each time it opens, including after the app window has moved.
 
 ## [0.12.4] - 2026-11-06

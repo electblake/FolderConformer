@@ -190,6 +190,14 @@ class SettingsUiTests(unittest.TestCase):
         window.close()
 
     def test_shared_allowed_files_rule_settings_navigation(self):
+        self.assert_allowed_files_navigation((("photo_extensions", "J1"), ("video_extensions", "S6"),
+                                              ("extension", "N4"), ("data_extensions", "R3")))
+
+    def test_root_media_allowed_files_settings_navigation(self):
+        self.assert_allowed_files_navigation((("landscape", "H2"), ("landscape_images", "B7"),
+                                              ("music_videos", "M5")))
+
+    def assert_allowed_files_navigation(self, rules):
         controller = Controller(self.temporary.name)
         engine = QQmlApplicationEngine()
         engine.addImageProvider("standard", StandardIconProvider())
@@ -199,8 +207,7 @@ class SettingsUiTests(unittest.TestCase):
         engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/Main.qml")))
         window = engine.rootObjects()[0]
         QTest.qWait(100)
-        for rule_id, identifier in (("photo_extensions", "J1"), ("video_extensions", "S6"),
-                                    ("extension", "N4"), ("data_extensions", "R3")):
+        for rule_id, identifier in rules:
             with self.subTest(rule=identifier):
                 QMetaObject.invokeMethod(self.rule_control(window, rule_id + "Settings"), "clicked")
                 APP.processEvents()
@@ -240,7 +247,7 @@ class SettingsUiTests(unittest.TestCase):
                 self.assertTrue(dialog.findChild(QObject, "rulesSettingsPage").property("visible"))
                 field_name = "create_empty_fileFileName" if identifier == "E1" else "extensionAllowedFiles"
                 self.assertTrue(dialog.findChild(QObject, field_name).property("visible"))
-            elif identifier in ("J1", "S6", "N4", "R3"):
+            elif identifier in ("J1", "S6", "N4", "R3", "H2", "B7", "M5"):
                 self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
                 self.assertTrue(dialog.findChild(QObject, "extensionAllowedFiles").property("visible"))
             else:
