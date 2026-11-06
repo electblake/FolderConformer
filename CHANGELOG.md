@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-06
+
 ### Added
 
 - Added a one-third-width settings sidebar with General, Rules, and File Settings groups and live search across setting titles and tooltips.

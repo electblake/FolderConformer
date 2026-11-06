@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QMetaObject, QObject, QUrl
+from PySide6.QtCore import QMetaObject, QObject, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -43,7 +43,19 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-music-GUI-") as directo
         host.show()
         host.resize(1300, 1000)
         QTest.qWait(100)
-        host.folder_fields["musicVideoFolder"].textEdited.emit("Tunes")
+        QMetaObject.invokeMethod(quick.findChild(QObject, "settingsMenu"), "triggered")
+        qt.processEvents()
+        settings = quick.findChild(QObject, "settingsDialog")
+        QMetaObject.invokeMethod(settings.findChild(QObject, "fileSettingsGroup"), "clicked")
+        pending = [settings.contentItem()]
+        settings_controls = {}
+        while pending:
+            item = pending.pop()
+            settings_controls[item.objectName()] = item
+            pending.extend(item.childItems())
+        settings_controls["musicVideoFolder"].setProperty("text", "Tunes")
+        QMetaObject.invokeMethod(settings_controls["musicVideoFolder"], "textEdited")
+        settings.close()
         host.audio_thresholds["/m/04rlf"].setValue(0.504)
         host.audio_thresholds["/m/015lz1"].setValue(0.85)
         host.audio_thresholds["/m/02fxyj"].setValue(0.95)
@@ -51,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-music-GUI-") as directo
         assert (dict(restored.audioClasses)["/m/04rlf"], dict(restored.audioClasses)["/m/015lz1"], dict(restored.audioClasses)["/m/02fxyj"]) == (0.504, 0.85, 0.95)
         assert app.Controller().musicVideoFolder == "Tunes"
         assert host.audio_dock.isVisible()
-        assert host.audio_dock.y() >= host.files_dock.y() + host.files_dock.height()
+        assert host.dockWidgetArea(host.audio_dock) == Qt.DockWidgetArea.RightDockWidgetArea
         pending = [quick.contentItem()]
         controls = {}
         while pending:
@@ -75,7 +87,10 @@ with tempfile.TemporaryDirectory(prefix="FolderConformer-music-GUI-") as directo
         assert controller.process.exitCode() == 0, "".join(output)
         assert controller.checkStatuses["music_videos"] == "OK"
         shutil.copyfile(moved, source)
-        host.enumerate_conflicts.click()
+        QMetaObject.invokeMethod(quick.findChild(QObject, "settingsMenu"), "triggered")
+        settings_controls["enumerateConflicts"].setProperty("checked", True)
+        QMetaObject.invokeMethod(settings_controls["enumerateConflicts"], "toggled")
+        settings.close()
         for index, rule in enumerate(controller.rules):
             controller.setEnabled(index, rule["id"] == "music_videos")
         QMetaObject.invokeMethod(quick.findChild(QObject, "executeRules"), "clicked")
