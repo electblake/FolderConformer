@@ -27,39 +27,47 @@ FOLDER_FILES = ("video/", "photo/",
 
 
 class PipelineTests(unittest.TestCase):
-    def test_i2_ignored_filenames_check_and_move(self):
-        media = self.folder / "photo"
-        media.mkdir()
-        for name in (".forceGallery", "keep.txt", "move.txt", "image.jpg", "keep.txt.bak"):
-            (media / name).write_text(name)
-        (media / "nested").mkdir()
-        (media / "nested/deep.txt").write_text("nested")
-        self.assertEqual(check_rule(self.folder, "non_image_to_root", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+    def test_n4_allowed_files_check_and_move(self):
+        for name in (".forceGallery", "keep.txt", "move.txt", "keep.txt.bak"):
+            (self.folder / name).write_text(name)
+        self.assertEqual(check_rule(self.folder, "extension", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
+        allowed = " .FORCEGALLERY ; KEEP.txt;; "
         with contextlib.redirect_stdout(io.StringIO()):
-            conform(self.folder, [{"id": "non_image_to_root", "enabled": True}], "Wide", FFPROBE,
-                    *FOLDER_FILES, non_image_ignored_filenames=" .FORCEGALLERY ; KEEP.txt;; ")
-        for name in (".forceGallery", "keep.txt", "image.jpg", "nested/deep.txt"):
-            self.assertTrue((media / name).is_file())
-        for name in ("move.txt", "keep.txt.bak"):
+            conform(self.folder, [{"id": "extension", "enabled": True}], "Wide", FFPROBE,
+                    *FOLDER_FILES, extension_allowed_files=allowed)
+        for name in (".forceGallery", "keep.txt"):
             self.assertEqual((self.folder / name).read_text(), name)
-        self.assertEqual(check_rule(self.folder, "non_image_to_root", *FOLDER_FILES, FFPROBE, "Wide",
-                                   non_image_ignored_filenames=" .FORCEGALLERY ; KEEP.txt;; "), "OK")
-        self.assertEqual(check_rule(self.folder, "non_image_to_root", *FOLDER_FILES, FFPROBE, "Wide",
-                                   non_image_ignored_filenames=""), "BAD")
+        self.assertTrue((self.folder / "txt/move.txt").is_file())
+        self.assertTrue((self.folder / "bak/keep.txt.bak").is_file())
+        self.assertEqual(check_rule(self.folder, "extension", *FOLDER_FILES, FFPROBE, "Wide",
+                                   extension_allowed_files=allowed), "OK")
+        self.assertEqual(check_rule(self.folder, "extension", *FOLDER_FILES, FFPROBE, "Wide",
+                                   extension_allowed_files=""), "BAD")
         with contextlib.redirect_stdout(io.StringIO()):
-            conform(self.folder, [{"id": "non_image_to_root", "enabled": True}], "Wide", FFPROBE,
-                    *FOLDER_FILES, non_image_ignored_filenames="")
-        self.assertTrue((self.folder / ".forceGallery").is_file())
-        self.assertTrue((self.folder / "keep.txt").is_file())
+            conform(self.folder, [{"id": "extension", "enabled": True}], "Wide", FFPROBE,
+                    *FOLDER_FILES, extension_allowed_files="")
+        self.assertTrue((self.folder / "no-extension/.forceGallery").is_file())
+        self.assertTrue((self.folder / "txt/keep.txt").is_file())
 
-    def test_i2_default_preserves_empty_file_marker(self):
+    def test_n4_default_allows_marker_and_folder_images(self):
+        names = (".forceGallery", "folder.jpg", "folder.png", "folder.jpeg")
+        for name in names:
+            (self.folder / name).write_text(name)
+        self.assertEqual(check_rule(self.folder, "extension", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+        with contextlib.redirect_stdout(io.StringIO()):
+            conform(self.folder, [{"id": "extension", "enabled": True}], "Wide", FFPROBE, *FOLDER_FILES)
+        for name in names:
+            self.assertEqual((self.folder / name).read_text(), name)
+
+    def test_i2_no_longer_excludes_marker(self):
         media = self.folder / "photo"
         media.mkdir()
         (media / ".forceGallery").write_text("preserved")
-        self.assertEqual(check_rule(self.folder, "non_image_to_root", *FOLDER_FILES, FFPROBE, "Wide"), "OK")
+        self.assertEqual(check_rule(self.folder, "non_image_to_root", *FOLDER_FILES, FFPROBE, "Wide"), "BAD")
         with contextlib.redirect_stdout(io.StringIO()):
             conform(self.folder, [{"id": "non_image_to_root", "enabled": True}], "Wide", FFPROBE, *FOLDER_FILES)
-        self.assertEqual((media / ".forceGallery").read_text(), "preserved")
+        self.assertEqual((self.folder / ".forceGallery").read_text(), "preserved")
+        self.assertFalse((media / ".forceGallery").exists())
 
     def test_create_empty_file_in_root_and_preserve_existing_content(self):
         rules = [{"id": "create_empty_file", "enabled": True}]
@@ -863,7 +871,7 @@ class PipelineTests(unittest.TestCase):
         folder.mkdir()
         (folder / "é.txt").write_text("preserved")
         result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;"],
+                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;"],
                                 check=True, capture_output=True, encoding="utf-8",
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
@@ -877,7 +885,7 @@ class PipelineTests(unittest.TestCase):
                 (folder / "txt/note.txt").write_text("original")
                 (folder / "note.txt").write_text("incoming")
                 arguments = [sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;"]
+                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;"]
                 if enumerate_conflicts:
                     arguments.append("--enumerate-conflicts")
                 result = subprocess.run(arguments, check=True, capture_output=True, encoding="utf-8")

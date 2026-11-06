@@ -9,25 +9,79 @@ GroupBox {
     objectName: "rulesPanel"
     required property QtObject controller
     signal runOnceRequested(int index)
+    signal settingsRequested(string ruleId)
     title: qsTr("Rules")
     hoverEnabled: true
     ToolTip.visible: hovered
     ToolTip.text: qsTr("Rules are applied from top to bottom.")
     contentWidth: ruleContents.implicitWidth
-    contentHeight: ruleContents.implicitHeight
+    contentHeight: ruleContents.contentHeight
 
-    ColumnLayout {
+    ListView {
         id: ruleContents
+        objectName: "ruleList"
         anchors.fill: parent
+        clip: true
         spacing: 8
-        Repeater {
-            model: panel.controller.rules
-            delegate: RowLayout {
+        cacheBuffer: 4096
+        implicitWidth: contentItem.children.reduce((width, item) => Math.max(width, item.implicitWidth), 0)
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
+        property bool dragOver: false
+        property real dragY: 0
+        Timer {
+            interval: 16
+            repeat: true
+            running: ruleContents.dragOver
+            onTriggered: {
+                const direction = ruleContents.dragY < 32 ? -1 : (ruleContents.dragY > ruleContents.height - 32 ? 1 : 0)
+                ruleContents.contentY = Math.max(ruleContents.originY,
+                    Math.min(ruleContents.originY + Math.max(0, ruleContents.contentHeight - ruleContents.height),
+                             ruleContents.contentY + direction * 8))
+            }
+        }
+        model: panel.controller.rules
+        delegate: DropArea {
+            id: dropRow
+            required property int index
+            required property var modelData
+            width: ruleContents.width
+            height: ruleRow.implicitHeight
+            implicitWidth: ruleRow.implicitWidth
+            keys: ["application/x-folderconformer-rule"]
+            property bool insertAfter: false
+            function trackDrag(drag) {
+                insertAfter = drag.y >= height / 2
+                ruleContents.dragY = mapToItem(ruleContents, drag.x, drag.y).y
+                ruleContents.dragOver = true
+            }
+            onPositionChanged: function(drag) { trackDrag(drag) }
+            onEntered: function(drag) { trackDrag(drag) }
+            onExited: ruleContents.dragOver = false
+            onDropped: function(drop) {
+                ruleContents.dragOver = false
+                const sourceIndex = drop.source.sourceIndex
+                const boundary = index + (drop.y >= height / 2 ? 1 : 0)
+                const destination = boundary > sourceIndex ? boundary - 1 : boundary
+                drop.accept(Qt.MoveAction)
+                if (destination !== sourceIndex)
+                    Qt.callLater(panel.controller.moveRule, sourceIndex, destination - sourceIndex)
+            }
+            Rectangle {
+                width: parent.width
+                height: 2
+                y: dropRow.insertAfter ? parent.height + 3 : -4
+                color: panel.palette.highlight
+                visible: dropRow.containsDrag
+                z: 2
+            }
+            RowLayout {
                 id: ruleRow
-                required property int index
-                required property var modelData
-                Layout.fillWidth: true
+                readonly property int index: dropRow.index
+                readonly property var modelData: dropRow.modelData
+                width: parent.width
                 Label {
+                    id: ruleIdentifier
                     objectName: ruleRow.modelData.id + "Identifier"
                     Layout.preferredWidth: 32
                     text: ({
@@ -111,6 +165,18 @@ GroupBox {
                     onToggled: panel.controller.setEnabled(ruleRow.index, checked)
                 }
                 Button {
+                    id: ruleSettings
+                    objectName: ruleRow.modelData.id + "Settings"
+                    Layout.preferredWidth: implicitHeight
+                    Accessible.name: qsTr("Settings for %1").arg(ruleIdentifier.text)
+                    ToolTip.visible: hovered || activeFocus
+                    ToolTip.text: Accessible.name
+                    text: "\ue713"
+                    font.family: "Segoe Fluent Icons"
+                    font.pixelSize: 16
+                    onClicked: panel.settingsRequested(ruleIdentifier.text)
+                }
+                Button {
                     objectName: ruleRow.modelData.id + "Check"
                     text: qsTr("Check")
                     display: AbstractButton.IconOnly
@@ -168,6 +234,76 @@ GroupBox {
                     ToolTip.text: qsTr("Move rule down")
                     enabled: ruleRow.index < panel.controller.rules.length - 1
                     onClicked: panel.controller.moveRule(ruleRow.index, 1)
+                }
+                ToolButton {
+                    id: moveHandle
+                    objectName: ruleRow.modelData.id + "DragHandle"
+                    Layout.preferredWidth: implicitHeight
+                    text: "\ue759"
+                    font.family: "Segoe Fluent Icons"
+                    font.pixelSize: 16
+                    Accessible.name: qsTr("Drag to reorder %1").arg(ruleIdentifier.text)
+                    ToolTip.visible: hovered && !moveDrag.active
+                    ToolTip.text: Accessible.name
+                    readonly property int sourceIndex: ruleRow.index
+                    Rectangle {
+                        id: dragProxy
+                        parent: panel
+                        width: 36
+                        height: 36
+                        radius: 4
+                        z: 10
+                        visible: Drag.active
+                        color: panel.palette.highlight
+                        Drag.keys: ["application/x-folderconformer-rule"]
+                        Drag.source: moveHandle
+                        Drag.supportedActions: Qt.MoveAction
+                        Drag.proposedAction: Qt.MoveAction
+                        Drag.hotSpot.x: width / 2
+                        Drag.hotSpot.y: height / 2
+                        Label {
+                            anchors.centerIn: parent
+                            text: moveHandle.text
+                            font: moveHandle.font
+                            color: panel.palette.highlightedText
+                        }
+                    }
+                    Shortcut {
+                        sequence: "Escape"
+                        enabled: dragProxy.Drag.active
+                        onActivated: {
+                            dragProxy.Drag.cancel()
+                            ruleContents.dragOver = false
+                        }
+                    }
+                    DragHandler {
+                        id: moveDrag
+                        target: null
+                        onCentroidChanged: {
+                            if (active) {
+                                const point = moveHandle.mapToItem(panel, centroid.position.x, centroid.position.y)
+                                dragProxy.x = point.x - dragProxy.width / 2
+                                dragProxy.y = point.y - dragProxy.height / 2
+                            }
+                        }
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        onActiveChanged: {
+                            if (active) {
+                                const point = moveHandle.mapToItem(panel, centroid.position.x, centroid.position.y)
+                                dragProxy.x = point.x - dragProxy.width / 2
+                                dragProxy.y = point.y - dragProxy.height / 2
+                                dragProxy.Drag.active = true
+                            } else {
+                                dragProxy.Drag.drop()
+                                ruleContents.dragOver = false
+                            }
+                        }
+                        onCanceled: {
+                            dragProxy.Drag.cancel()
+                            ruleContents.dragOver = false
+                        }
+                    }
                 }
             }
         }

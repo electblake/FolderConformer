@@ -145,12 +145,13 @@ def empty_directories(folder: Path):
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
                landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES,
-               empty_file_name=".forceGallery", music_threads=1, non_image_ignored_filenames=".forceGallery;"):
+               empty_file_name=".forceGallery", music_threads=1, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
     if rule_id == "create_empty_file":
         return "OK" if (folder / empty_file_name).is_file() else "BAD"
     if rule_id == "extension":
+        allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
         with os.scandir(folder) as entries:
-            bad = any(entry.is_file() for entry in entries)
+            bad = any(entry.is_file() and entry.name.casefold() not in allowed for entry in entries)
     elif rule_id in ("rename_images", "rename_videos"):
         names = ("image", "images") if rule_id == "rename_images" else ("video", "videos")
         destination = image_folder if rule_id == "rename_images" else video_folder
@@ -203,10 +204,8 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
     elif rule_id in ("non_video_to_root", "non_image_to_root"):
         directory, extensions = (video_folder, video_extensions) if rule_id == "non_video_to_root" else (image_folder, image_extensions)
         suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
-        ignored = {name.strip().casefold() for name in non_image_ignored_filenames.split(";") if name.strip()}
         with os.scandir(folder / directory) as entries:
             bad = any(entry.is_file() and Path(entry.path).parent != folder
-                      and (rule_id != "non_image_to_root" or entry.name.casefold() not in ignored)
                       and Path(entry.name).suffix.lstrip(".").lower() not in suffixes for entry in entries)
     elif rule_id == "remove_empty_dirs":
         pending = [Path(folder)]
@@ -286,7 +285,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
             music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, empty_file_name=".forceGallery",
-            worker_threads=DEFAULT_WORKER_THREADS, non_image_ignored_filenames=".forceGallery;"):
+            worker_threads=DEFAULT_WORKER_THREADS, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
     for rule_id, group in groupby(enabled_rules, key=lambda rule: rule["id"]):
@@ -297,7 +296,7 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             extensions = image_extensions if rule_id == "landscape_images" else video_extensions
             processed, moved = conform_files(source_folder, list(group), landscape_folder, ffprobe, extensions,
                                             control, enumerate_conflicts, music_folder, audio_classes,
-                                            worker_threads[rule_id] if rule_id != "extension" else 1)
+                                            worker_threads[rule_id] if rule_id != "extension" else 1, extension_allowed_files)
             files_processed += processed
             files_moved += moved
             if control is not None and control.stopped:
@@ -400,11 +399,9 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                     destination = folder
                     extensions = video_extensions if video else image_extensions
                     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
-                    ignored = {name.strip().casefold() for name in non_image_ignored_filenames.split(";") if name.strip()}
                     with os.scandir(media_folder) as entries:
                         files = [Path(entry.path) for entry in entries
                                  if entry.is_file() and Path(entry.path).parent != destination
-                                 and (rule["id"] != "non_image_to_root" or entry.name.casefold() not in ignored)
                                  and Path(entry.name).suffix.lstrip(".").lower() not in suffixes]
                 for index, source in enumerate(sorted(files), 1):
                     if control is not None and not control.checkpoint():
@@ -464,8 +461,10 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
 
 
 def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Path, extensions: str, control=None, enumerate_conflicts: bool = False,
-                  music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, threads=1):
+                  music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, threads=1,
+                  extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
     identifier = RULE_IDENTIFIERS[rules[0]["id"]]
+    allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     suffixes = {value.strip().lstrip(".").lower() for value in extensions.split(";") if value.strip()}
     files = []
     report(f"[{identifier}] Scanning {folder}", flush=True)
@@ -505,7 +504,7 @@ def conform_files(folder: Path, rules: list[dict], landscape_folder: str, ffprob
                     report(f"[{identifier}] Music: {source.name}, score={result.max_window_score:.6f}, thresholds={result.thresholds}", flush=True)
                     if result.contains_music:
                         destination /= music_folder
-            elif rule["id"] == "extension":
+            elif rule["id"] == "extension" and source.name.casefold() not in allowed:
                 destination /= source.suffix.lstrip(".").lower() or "no-extension"
         return destination
 

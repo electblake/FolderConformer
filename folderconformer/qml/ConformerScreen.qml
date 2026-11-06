@@ -6,6 +6,7 @@ Pane {
     id: screen
     objectName: "conformerScreen"
     required property QtObject controller
+    signal settingsRequested(string ruleId)
     property string status: qsTr("Ready")
     property string statusDetails: ""
     property string completionSummary: ""
@@ -32,11 +33,14 @@ Pane {
             Layout.minimumHeight: rulesPanel.topPadding + rulesPanel.bottomPadding + rulesPanel.font.pixelSize * 3
             contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
             clip: true
+            contentHeight: availableHeight
             RulesPanel {
                 id: rulesPanel
                 width: settingsScroll.contentWidth
+                height: settingsScroll.availableHeight
                 controller: screen.controller
                 enabled: !screen.controller.running
+                onSettingsRequested: function(ruleId) { screen.settingsRequested(ruleId) }
                 onRunOnceRequested: function(index) {
                     screen.completionSummary = ""
                     screen.processed = 0

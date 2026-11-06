@@ -31,6 +31,13 @@ ApplicationWindow {
         if (close.accepted)
             closeDialogs()
     }
+    function openSettings(query: string) {
+        settingsLoader.active = true
+        settingsLoader.item.searchQuery = query
+        settingsLoader.item.selectedGroup = query.length > 0 ? "rules" : "general"
+        settingsLoader.item.show()
+        settingsLoader.item.requestActivate()
+    }
     function closeDialogs() {
         window.choosingFolder = false
         if (settingsLoader.status === Loader.Ready)
@@ -58,11 +65,7 @@ ApplicationWindow {
                 objectName: "settingsMenu"
                 text: qsTr("&Settings…")
                 enabled: !window.controller.running && !window.controller.updates.busy
-                onTriggered: {
-                    settingsLoader.active = true
-                    settingsLoader.item.show()
-                    settingsLoader.item.requestActivate()
-                }
+                onTriggered: window.openSettings("")
             }
             MenuSeparator {}
             MenuItem {
@@ -220,6 +223,7 @@ ApplicationWindow {
 
     ConformerScreen {
         id: conformerScreen
+        onSettingsRequested: function(ruleId) { window.openSettings(ruleId) }
         anchors.fill: parent
         controller: window.controller
         enabled: !window.controller.updates.busy

@@ -10,6 +10,7 @@ ApplicationWindow {
     objectName: "settingsDialog"
     required property QtObject controller
     property bool choosing: false
+    property alias searchQuery: settingsSearch.text
     title: qsTr("Settings")
     flags: Qt.Dialog | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowCloseButtonHint
     modality: Qt.WindowModal
@@ -27,11 +28,11 @@ ApplicationWindow {
     readonly property bool generalMatches: configMatches || themeMatches
     readonly property string emptyFileTitle: qsTr("E1 — Create empty file")
     readonly property string emptyFileTooltip: qsTr("Filename in project root")
-    readonly property string ignoredFilenamesTitle: qsTr("I2 - Ignored filenames")
-    readonly property string ignoredFilenamesTooltip: qsTr("Separate filenames with semicolons. I2 leaves these files in the image folder. Matches full filenames, ignoring case and surrounding spaces.")
+    readonly property string allowedFilesTitle: qsTr("N4 - Allowed files")
+    readonly property string allowedFilesTooltip: qsTr("Separate filenames with semicolons. N4 leaves these files in the root folder. Matches full filenames, ignoring case and surrounding spaces.")
     readonly property bool emptyFileMatches: matches(emptyFileTitle, emptyFileTooltip)
-    readonly property bool ignoredFilenamesMatch: matches(ignoredFilenamesTitle, ignoredFilenamesTooltip)
-    readonly property bool rulesMatches: emptyFileMatches || ignoredFilenamesMatch
+    readonly property bool allowedFilesMatch: matches(allowedFilesTitle, allowedFilesTooltip)
+    readonly property bool rulesMatches: emptyFileMatches || allowedFilesMatch
     readonly property string extensionsTooltip: qsTr("Separate extensions with semicolons.")
     readonly property string conflictsTitle: qsTr("Resolve name conflicts")
     readonly property string conflictsTooltip: qsTr("Number conflicting names with _1, _2, \u2026 When unchecked, skip files whose destination name already exists.")
@@ -262,19 +263,19 @@ ApplicationWindow {
                                     selectByMouse: true
                                     onEditingFinished: dialog.controller.emptyFileName = text
                                 }
-                                Label { text: dialog.ignoredFilenamesTitle; visible: dialog.ignoredFilenamesMatch }
+                                Label { text: dialog.allowedFilesTitle; visible: dialog.allowedFilesMatch }
                                 TextField {
-                                    objectName: "nonImageIgnoredFilenames"
+                                    objectName: "extensionAllowedFiles"
                                     Layout.fillWidth: true
-                                    visible: dialog.ignoredFilenamesMatch
-                                    text: dialog.controller.nonImageIgnoredFilenames
-                                    placeholderText: ".forceGallery;"
-                                    Accessible.name: dialog.ignoredFilenamesTitle
+                                    visible: dialog.allowedFilesMatch
+                                    text: dialog.controller.extensionAllowedFiles
+                                    placeholderText: ".forceGallery;folder.jpg;folder.png;folder.jpeg;"
+                                    Accessible.name: dialog.allowedFilesTitle
                                     ToolTip.visible: hovered || activeFocus
-                                    ToolTip.text: dialog.ignoredFilenamesTooltip
+                                    ToolTip.text: dialog.allowedFilesTooltip
                                     enabled: !dialog.controller.running && !dialog.controller.updates.busy
                                     selectByMouse: true
-                                    onEditingFinished: dialog.controller.nonImageIgnoredFilenames = text
+                                    onEditingFinished: dialog.controller.extensionAllowedFiles = text
                                 }
                             }
                         }

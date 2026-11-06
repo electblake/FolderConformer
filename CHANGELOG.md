@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-06
+
+### Added
+
+- Added a trailing move handle for drag-and-drop rule ordering using Qt Quick ListView, DragHandler, and DropArea, with an insertion indicator, edge scrolling, cancellation, and saved ordering.
+- Added a settings gear before each rule's actions to open Settings with that rule ID in the search field.
+
+### Changed
+
+- Replaced the I2 ignored-filenames setting with N4 Allowed files, defaulting to `.forceGallery;folder.jpg;folder.png;folder.jpeg;`. N4 checks and execution leave these filenames in the root; I2 again moves all non-image files without filename exceptions.
+
 ## [0.12.1] - 2026-11-06
 
 ### Fixed
