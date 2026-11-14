@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-14
+
 ### Added
 
 - Added editable, semicolon-separated folder aliases under File Settings > Folders for F8 (Single images folder) and N2 (Single videos folder). Both rules use the saved lists for checks and execution and match folder names without regard to case.
@@ -14,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed a circular width calculation in the Rules panel that triggered layout warnings during resizing.
+- Fixed circular layout calculations in the Rules panel. The panel scrolls horizontally when narrow, and the rule list handles vertical scrolling and drag-to-reorder.
 
 ## [0.12.5] - 2026-11-06
 

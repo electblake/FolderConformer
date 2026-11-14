@@ -501,7 +501,7 @@ class DockingTests(unittest.TestCase):
         tree = self.host.preview.rootObject().findChild(QObject, "targetTree")
         preview = self.host.preview.rootObject()
         rules = self.quick.findChild(QObject, "rulesPanel")
-        rules_scroll = self.quick.findChild(QObject, "settingsScroll").property("contentItem")
+        rules_scroll = self.quick.findChild(QObject, "ruleList")
         open_all = self.host.preview.rootObject().findChild(QObject, "openTargetTree")
         collapse_all = self.host.preview.rootObject().findChild(QObject, "collapseTargetTree")
         QMetaObject.invokeMethod(tree, "forceLayout")
@@ -729,7 +729,7 @@ class DockingTests(unittest.TestCase):
         self.host.resize(900, 600)
         APP.processEvents()
         scroll = self.quick.findChild(QObject, "settingsScroll")
-        self.assertGreaterEqual(scroll.property("contentWidth"), scroll.property("availableWidth"))
+        self.assertGreaterEqual(scroll.property("contentWidth"), scroll.width())
         expected_media = {"landscape": "video", "extension": "other", "rename_images": "image",
                           "rename_videos": "video", "photo_extensions": "image", "video_extensions": "video",
                           "remove_empty_dirs": "other", "landscape_images": "image", "data_extensions": "other"}

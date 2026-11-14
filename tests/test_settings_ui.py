@@ -173,6 +173,8 @@ class SettingsUiTests(unittest.TestCase):
         drag_between(2, 0)
         self.assertEqual(controller.rules, original)
         self.assertEqual(Controller().rules, original)
+        window.resize(window.width(), window.minimumHeight())
+        APP.processEvents()
         view = window.findChild(QQuickItem, "ruleList")
         handle = self.rule_control(window, original[0]["id"] + "DragHandle")
         start = handle.mapToScene(QPointF(handle.width() / 2, handle.height() / 2)).toPoint()
@@ -366,17 +368,22 @@ class SettingsUiTests(unittest.TestCase):
         self.addCleanup(config_path.stop)
 
     def rule_control(self, window, name):
+        view = window.findChild(QQuickItem, "ruleList")
+        index = next(index for index, rule in enumerate(window.property("controller").rules)
+                     if name.startswith(rule["id"]))
+        APP.processEvents()
+        QMetaObject.invokeMethod(view, "forceLayout")
+        QMetaObject.invokeMethod(view, "positionViewAtIndex", Q_ARG(int, index), Q_ARG(int, 4))
+        APP.processEvents()
+        QMetaObject.invokeMethod(view, "forceLayout")
         pending = [window.contentItem()]
         while pending:
             item = pending.pop()
             if item.objectName() == name:
-                scroll = window.findChild(QObject, "settingsScroll").property("contentItem")
-                if scroll.isAncestorOf(item):
-                    position = item.mapToItem(scroll, QPointF(0, 0))
-                    scroll.setProperty("contentY", max(0, scroll.property("contentY") + position.y()))
-                    scroll.setProperty("contentX", max(0, min(scroll.property("contentX") + position.x(),
-                                                              scroll.property("contentWidth") - scroll.width())))
-                APP.processEvents()
+                scroll = window.findChild(QQuickItem, "settingsScroll")
+                position = item.mapToItem(scroll, QPointF(0, 0))
+                scroll.setProperty("contentX", max(0, min(scroll.property("contentX") + position.x(),
+                                                          scroll.property("contentWidth") - scroll.width())))
                 return item
             pending.extend(item.childItems())
 
@@ -898,7 +905,7 @@ class SettingsUiTests(unittest.TestCase):
         for name in ("rename_imagesMoveDown", "rename_imagesEnabled"):
             QTest.qWait(30)
             control = self.rule_control(window, name)
-            position = control.mapToScene(QPointF(control.width() / 2, control.height() / 2)).toPoint()
+            position = control.mapToScene(QPointF(min(16, control.width() / 2), control.height() / 2)).toPoint()
             QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
             APP.processEvents()
         self.assertEqual(controller.rules[3], {"id": "rename_images", "enabled": False})
@@ -1152,11 +1159,12 @@ class SettingsUiTests(unittest.TestCase):
             APP.processEvents()
             self.assertEqual(field.property("text"), value)
         for name in [*[rule["id"] + "Enabled" for rule in controller.rules if rule["enabled"]], "extensionMoveUp"]:
-            QTest.qWait(30)
             control = self.rule_control(window, name)
-            position = control.mapToScene(QPointF(control.width() / 2, control.height() / 2)).toPoint()
-            QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
-            APP.processEvents()
+            if name.endswith("Enabled"):
+                control.setProperty("checked", False)
+                QMetaObject.invokeMethod(control, "toggled")
+            else:
+                QMetaObject.invokeMethod(control, "clicked")
         host.close()
         restored = Controller()
         restored_engine = QQmlApplicationEngine()

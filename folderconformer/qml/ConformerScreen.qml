@@ -23,21 +23,24 @@ Pane {
         anchors.fill: parent
         spacing: 12
 
-        ScrollView {
+        Flickable {
             id: settingsScroll
             objectName: "settingsScroll"
             implicitWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredHeight: 800
-            Layout.minimumHeight: rulesPanel.topPadding + rulesPanel.bottomPadding + rulesPanel.font.pixelSize * 3
+            Layout.minimumHeight: rulesPanel.topPadding + rulesPanel.bottomPadding + rulesPanel.font.pixelSize * 3 + horizontalBar.implicitHeight
             contentWidth: rulesPanel.width
+            contentHeight: height
+            flickableDirection: Flickable.HorizontalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.horizontal: ScrollBar { id: horizontalBar }
             clip: true
-            contentHeight: availableHeight
             RulesPanel {
                 id: rulesPanel
-                width: Math.max(settingsScroll.availableWidth, implicitWidth)
-                height: settingsScroll.availableHeight
+                width: Math.max(settingsScroll.width, implicitWidth)
+                height: settingsScroll.height - horizontalBar.implicitHeight
                 controller: screen.controller
                 enabled: !screen.controller.running
                 onSettingsRequested: function(ruleId) { screen.settingsRequested(ruleId) }
