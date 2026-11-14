@@ -37,7 +37,7 @@ Source: "..\folderconformer\qml\*.qml"; DestDir: "{app}\source\folderconformer\q
 Source: "..\pyproject.toml"; DestDir: "{app}\source"; Flags: ignoreversion
 Source: "..\uv.lock"; DestDir: "{app}\source"; Flags: ignoreversion
 Source: "https://www.kaggle.com/api/v1/models/google/yamnet/tensorFlow2/yamnet/1/download"; DestDir: "{tmp}"; DestName: "yamnet.tar.gz"; ExternalSize: 14242921; Hash: "b80da2a1a56926fb0767205051a200dd7b3beaf3ea1ea126c42a53943996e5e0"; Flags: external download ignoreversion deleteafterinstall
-Source: "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe"; DestDir: "{tmp}"; DestName: "VC_redist.x64.exe"; ExternalSize: 18731856; Hash: "843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c"; Flags: external download ignoreversion deleteafterinstall
+Source: "https://download.visualstudio.microsoft.com/download/pr/ebdab8e5-1d7b-4d9f-a11b-cbb1720c3b12/843068991DAAA1F73AD9F6239BCE4D0F6A07A51F18C37EA2A867E9BECA71295C/VC_redist.x64.exe"; DestDir: "{tmp}"; DestName: "VC_redist.x64.exe"; ExternalSize: 18731856; Hash: "843068991daaa1f73ad9f6239bce4d0f6a07a51f18c37ea2a867e9beca71295c"; Flags: external download ignoreversion deleteafterinstall; Check: NeedsVCRedist
 Source: "install_runtime.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
@@ -49,7 +49,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{localappdata}\{#MyAppName}\runt
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{localappdata}\{#MyAppName}\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; IconFilename: "{app}\source\folderconformer\FolderConformer.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ runtime..."; Flags: shellexec waituntilterminated; AfterInstall: InstallRuntime
+Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; StatusMsg: "Installing Microsoft Visual C++ runtime..."; Flags: shellexec waituntilterminated; Check: NeedsVCRedist
 Filename: "{localappdata}\{#MyAppName}\runtime\venv\Scripts\pythonw.exe"; Parameters: "-I -m folderconformer"; WorkingDir: "{app}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
@@ -58,8 +58,26 @@ Type: filesandordirs; Name: "\\?\{localappdata}\{#MyAppName}\runtime"
 Type: filesandordirs; Name: "\\?\{localappdata}\{#MyAppName}\Cache"
 
 [Code]
+const
+  VCRuntimeKey = 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64';
+
 var
   RuntimeExitCode: Integer;
+
+function NeedsVCRedist: Boolean;
+var
+  Installed, Major, Minor, Build, Revision: Cardinal;
+begin
+  // Compare with the file version of the pinned x64 redistributable above.
+  Result := not (
+    RegQueryDWordValue(HKLM64, VCRuntimeKey, 'Installed', Installed) and (Installed = 1) and
+    RegQueryDWordValue(HKLM64, VCRuntimeKey, 'Major', Major) and
+    RegQueryDWordValue(HKLM64, VCRuntimeKey, 'Minor', Minor) and
+    RegQueryDWordValue(HKLM64, VCRuntimeKey, 'Bld', Build) and
+    RegQueryDWordValue(HKLM64, VCRuntimeKey, 'Rbld', Revision) and
+    (ComparePackedVersion(PackVersionComponents(Major, Minor, Build, Revision),
+      PackVersionComponents(14, 51, 36247, 0)) >= 0));
+end;
 
 procedure InstallRuntime;
 begin
@@ -69,6 +87,12 @@ begin
       ExpandConstant('{app}\install_runtime.py') + '" "' + ExpandConstant('{app}\source') +
       '" "' + ExpandConstant('{app}\tools\uv.exe') + '" "' + ExpandConstant('{tmp}\yamnet.tar.gz') + '" "{#MyAppName}"',
       ExpandConstant('{app}'), SW_SHOWNORMAL, ewWaitUntilTerminated, RuntimeExitCode, nil);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    InstallRuntime;
 end;
 
 function GetCustomSetupExitCode: Integer;

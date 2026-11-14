@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-14
+
+### Fixed
+
+- Reused an installed Visual C++ x64 redistributable when it meets Setup's required version, avoiding repeat downloads, installations, and Windows approval prompts.
+
 ## [0.13.0] - 2026-11-14
 
 ### Added
