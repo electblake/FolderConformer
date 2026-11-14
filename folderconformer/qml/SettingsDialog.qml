@@ -45,7 +45,9 @@ ApplicationWindow {
         {key: "landscapeFolder", title: qsTr("Landscape folder name"), tooltip: ""},
         {key: "musicVideoFolder", title: qsTr("Music Video folder"), tooltip: ""},
         {key: "videoFolder", title: qsTr("Video folder"), tooltip: ""},
+        {key: "videoFolderAliases", title: qsTr("Video folder aliases (N2)"), tooltip: qsTr("Separate folder names with semicolons. N2 renames or merges matching folders at the project root into the video folder.")},
         {key: "imageFolder", title: qsTr("Image folder"), tooltip: ""},
+        {key: "imageFolderAliases", title: qsTr("Image folder aliases (F8)"), tooltip: qsTr("Separate folder names with semicolons. F8 renames or merges matching folders at the project root into the image folder.")},
         {key: "dataFolder", title: qsTr("Data"), tooltip: ""}
     ]
     readonly property bool conflictsMatch: matches(conflictsTitle, conflictsTooltip)

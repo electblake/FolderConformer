@@ -24,6 +24,7 @@ from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QDialogButtonBo
 
 from folderconformer.updates import APP_NAME, APP_VERSION, Updates, install_after_exit
 from folderconformer.music_model import DEFAULT_AUDIO_CLASSES, MODEL_PATH, MUSIC_THRESHOLD
+from folderconformer.pipeline import DEFAULT_IMAGE_FOLDER_ALIASES, DEFAULT_VIDEO_FOLDER_ALIASES
 from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS, report, worker_results
 
 
@@ -116,6 +117,8 @@ class Controller(QObject):
             "audio/classes", json.dumps(DEFAULT_AUDIO_CLASSES), type=str))
         self._video_folder = self.settings.value("videoFolder", "video/", type=str)
         self._image_folder = self.settings.value("imageFolder", "photo/", type=str)
+        self._image_folder_aliases = self.settings.value("imageFolderAliases", DEFAULT_IMAGE_FOLDER_ALIASES, type=str)
+        self._video_folder_aliases = self.settings.value("videoFolderAliases", DEFAULT_VIDEO_FOLDER_ALIASES, type=str)
         self._data_folder = self.settings.value("dataFolder", "Data/", type=str)
         self._empty_file_name = self.settings.value("emptyFileName", ".forceGallery", type=str)
         self._extension_allowed_files = self.settings.value("extensionAllowedFiles", ".forceGallery;folder.jpg;folder.png;folder.jpeg;", type=str)
@@ -231,6 +234,8 @@ class Controller(QObject):
         self.settings.setValue("audio/classes", json.dumps(self._audio_classes))
         self.settings.setValue("videoFolder", self._video_folder)
         self.settings.setValue("imageFolder", self._image_folder)
+        self.settings.setValue("imageFolderAliases", self._image_folder_aliases)
+        self.settings.setValue("videoFolderAliases", self._video_folder_aliases)
         self.settings.setValue("dataFolder", self._data_folder)
         self.settings.setValue("emptyFileName", self._empty_file_name)
         self.settings.setValue("extensionAllowedFiles", self._extension_allowed_files)
@@ -384,6 +389,28 @@ class Controller(QObject):
         self.save()
 
     @Property(str, notify=configurationChanged)
+    def imageFolderAliases(self):
+        return self._image_folder_aliases
+
+    @imageFolderAliases.setter
+    def imageFolderAliases(self, value):
+        self._image_folder_aliases = value
+        self._check_statuses.pop("rename_images", None)
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(str, notify=configurationChanged)
+    def videoFolderAliases(self):
+        return self._video_folder_aliases
+
+    @videoFolderAliases.setter
+    def videoFolderAliases(self, value):
+        self._video_folder_aliases = value
+        self._check_statuses.pop("rename_videos", None)
+        self.checkStatusesChanged.emit()
+        self.save()
+
+    @Property(str, notify=configurationChanged)
     def dataFolder(self):
         return self._data_folder
 
@@ -445,7 +472,8 @@ class Controller(QObject):
         self._launch("check", ["--check", self._folder, rule_id, self._video_folder, self._image_folder,
                                self._video_extensions, self._image_extensions, self._data_folder, self._data_extensions,
                                self._landscape_folder, self._music_video_folder, json.dumps(self._audio_classes),
-                               self._empty_file_name, json.dumps(self._worker_threads), self._extension_allowed_files])
+                               self._empty_file_name, json.dumps(self._worker_threads), self._extension_allowed_files,
+                               self._image_folder_aliases, self._video_folder_aliases])
 
     @Slot()
     def checkAll(self):
@@ -459,7 +487,8 @@ class Controller(QObject):
                                 self._image_folder, self._video_extensions, self._image_extensions,
                                 self._data_folder, self._data_extensions, self._landscape_folder,
                                 self._music_video_folder, json.dumps(self._audio_classes), self._empty_file_name,
-                                json.dumps(self._worker_threads), self._extension_allowed_files])
+                                json.dumps(self._worker_threads), self._extension_allowed_files,
+                                self._image_folder_aliases, self._video_folder_aliases])
 
     @Property(bool, notify=runningChanged)
     def checking(self):
@@ -543,7 +572,8 @@ class Controller(QObject):
         arguments = ["--worker", self._folder, json.dumps(rules), self._landscape_folder,
                      self._video_folder, self._image_folder, self._video_extensions, self._image_extensions,
                      self._data_folder, self._data_extensions, self._music_video_folder,
-                     json.dumps(self._audio_classes), self._empty_file_name, json.dumps(self._worker_threads), self._extension_allowed_files, "--controlled"]
+                     json.dumps(self._audio_classes), self._empty_file_name, json.dumps(self._worker_threads),
+                     self._extension_allowed_files, self._image_folder_aliases, self._video_folder_aliases, "--controlled"]
         if self._enumerate_conflicts:
             arguments.append("--enumerate-conflicts")
         self._launch("conform", arguments)
@@ -954,7 +984,8 @@ def main():
         def check(rule_id):
             return check_rule(Path(sys.argv[2]), rule_id, sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7],
                               sys.argv[8], sys.argv[9], Path(get_platform_dir()) / "ffprobe.exe", sys.argv[10],
-                              sys.argv[11], json.loads(sys.argv[12]), sys.argv[13], worker_threads["music_videos"], sys.argv[15])
+                              sys.argv[11], json.loads(sys.argv[12]), sys.argv[13], worker_threads["music_videos"], sys.argv[15],
+                              image_folder_aliases=sys.argv[16], video_folder_aliases=sys.argv[17])
         with worker_results(check, rule_ids, worker_threads["checks"]) as results:
             for rule_id, status in results:
                 report(f"Check: {rule_id} {status}", flush=True)
@@ -964,12 +995,14 @@ def main():
         sys.stderr.reconfigure(encoding="utf-8")
         from folderconformer.pipeline import RunControl, conform
         tools = Path(get_platform_dir())
-        control = RunControl() if "--controlled" in sys.argv[16:] else None
+        flags = sys.argv[18:]
+        control = RunControl() if "--controlled" in flags else None
         conform(Path(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4], tools / "ffprobe.exe",
                 sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10],
-                control=control, enumerate_conflicts="--enumerate-conflicts" in sys.argv[16:],
+                control=control, enumerate_conflicts="--enumerate-conflicts" in flags,
                 music_folder=sys.argv[11], audio_classes=json.loads(sys.argv[12]), empty_file_name=sys.argv[13],
-                worker_threads=json.loads(sys.argv[14]), extension_allowed_files=sys.argv[15])
+                worker_threads=json.loads(sys.argv[14]), extension_allowed_files=sys.argv[15],
+                image_folder_aliases=sys.argv[16], video_folder_aliases=sys.argv[17])
         return 2 if control is not None and control.stopped else 0
     log_directory = user_log_path(APP_NAME, appauthor=False)
     log_directory.mkdir(parents=True, exist_ok=True)

@@ -14,7 +14,7 @@ from PySide6.QtGui import QGuiApplication
 from static_ffmpeg.run import get_platform_dir
 
 from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS
-from folderconformer.pipeline import RunControl, check_rule, conform, empty_directories, image_files, is_landscape, video_files
+from folderconformer.pipeline import DEFAULT_IMAGE_FOLDER_ALIASES, DEFAULT_VIDEO_FOLDER_ALIASES, RunControl, check_rule, conform, empty_directories, image_files, is_landscape, video_files
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -588,6 +588,7 @@ class PipelineTests(unittest.TestCase):
         for original, expected, rule_id in (
             ("ImAgE", "photo", "rename_images"), ("IMAGES", "photo", "rename_images"),
             ("ViDeO", "video", "rename_videos"), ("VIDEOS", "video", "rename_videos"),
+            ("PiCs", "photo", "rename_images"), ("ViDs", "video", "rename_videos"),
         ):
             with self.subTest(original=original):
                 source = self.folder / original
@@ -933,7 +934,8 @@ class PipelineTests(unittest.TestCase):
         folder.mkdir()
         (folder / "é.txt").write_text("preserved")
         result = subprocess.run([sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;"],
+                                 json.dumps([{"id": "extension", "enabled": True}]), "Landscape-FULL", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;",
+                                 DEFAULT_IMAGE_FOLDER_ALIASES, DEFAULT_VIDEO_FOLDER_ALIASES],
                                 check=True, capture_output=True, encoding="utf-8",
                                 env=__import__("os").environ | {"PYTHONIOENCODING": "utf-8"})
         self.assertIn("Completed", result.stdout)
@@ -947,7 +949,8 @@ class PipelineTests(unittest.TestCase):
                 (folder / "txt/note.txt").write_text("original")
                 (folder / "note.txt").write_text("incoming")
                 arguments = [sys.executable, str(ROOT / "main.py"), "--worker", str(folder),
-                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;"]
+                             json.dumps([{"id": "extension", "enabled": True}]), "Wide", *FOLDER_FILES, "with-music", '[["/m/04rlf",0.5],["/m/015lz1",0.5],["/m/02fxyj",0.5]]', ".forceGallery", json.dumps(DEFAULT_WORKER_THREADS), ".forceGallery;folder.jpg;folder.png;folder.jpeg;",
+                             DEFAULT_IMAGE_FOLDER_ALIASES, DEFAULT_VIDEO_FOLDER_ALIASES]
                 if enumerate_conflicts:
                     arguments.append("--enumerate-conflicts")
                 result = subprocess.run(arguments, check=True, capture_output=True, encoding="utf-8")

@@ -566,20 +566,27 @@ class DockingTests(unittest.TestCase):
         self.assertFalse(landscape.property("acceptableInput"))
 
     def test_file_settings_search_titles_and_tooltips(self):
+        image_aliases = self.setting_field("imageFolderAliases")
+        video_aliases = self.setting_field("videoFolderAliases")
+        landscape_folder = self.setting_field("landscapeFolder")
+        video_folder = self.setting_field("videoFolder")
+        video_extensions = self.setting_field("videoExtensions")
         dialog = self.file_settings()
         search = dialog.findChild(QObject, "settingsSearch")
         search.setProperty("text", "semicolons")
         self.assertTrue(dialog.findChild(QObject, "fileSettingsGroup").property("visible"))
         self.assertTrue(dialog.findChild(QObject, "filesSettingsFields").property("visible"))
-        self.assertFalse(dialog.findChild(QObject, "foldersSettingsFields").property("visible"))
+        self.assertTrue(dialog.findChild(QObject, "foldersSettingsFields").property("visible"))
+        self.assertTrue(image_aliases.property("visible"))
+        self.assertTrue(video_aliases.property("visible"))
         search.setProperty("text", "Landscape folder")
         self.assertFalse(dialog.findChild(QObject, "filesSettingsFields").property("visible"))
         self.assertTrue(dialog.findChild(QObject, "foldersSettingsFields").property("visible"))
-        self.assertTrue(self.setting_field("landscapeFolder").property("visible"))
-        self.assertFalse(self.setting_field("videoFolder").property("visible"))
+        self.assertTrue(landscape_folder.property("visible"))
+        self.assertFalse(video_folder.property("visible"))
         search.setProperty("text", "destination name already exists")
         self.assertTrue(dialog.findChild(QObject, "enumerateConflicts").property("visible"))
-        self.assertFalse(self.setting_field("videoExtensions").property("visible"))
+        self.assertFalse(video_extensions.property("visible"))
 
     def test_extension_edits_persist_and_keep_keyboard_order(self):
         for name, value in (("videoExtensions", "mxf;MP4"), ("imageExtensions", "gif;png"), ("dataExtensions", " .CSV;db;txt;")):

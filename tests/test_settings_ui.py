@@ -250,6 +250,10 @@ class SettingsUiTests(unittest.TestCase):
             elif identifier in ("J1", "S6", "N4", "R3", "H2", "B7", "M5"):
                 self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
                 self.assertTrue(dialog.findChild(QObject, "extensionAllowedFiles").property("visible"))
+            elif identifier in ("F8", "N2"):
+                self.assertTrue(dialog.findChild(QObject, "fileSettingsPage").property("visible"))
+                field_name = "imageFolderAliases" if identifier == "F8" else "videoFolderAliases"
+                self.assertTrue(self.folder_alias_field(dialog, field_name).property("visible"))
             else:
                 self.assertTrue(dialog.findChild(QObject, "noMatchingSettings").property("visible"))
             dialog.close()
@@ -643,6 +647,75 @@ class SettingsUiTests(unittest.TestCase):
             self.assertEqual(controller.checkStatuses["extension"], expected)
         self.assertEqual((folder / "txt/note.txt").read_text(), "existing")
         self.assertEqual((folder / "txt/note_1.txt").read_text(), "incoming")
+
+    def folder_alias_field(self, dialog, name):
+        pending = [dialog.contentItem()]
+        while pending:
+            item = pending.pop()
+            if item.objectName() == name:
+                return item
+            pending.extend(item.childItems())
+
+    def test_folder_alias_settings_persist_and_reach_check_and_run_workers(self):
+        folder = Path(self.temporary.name) / "media"
+        folder.mkdir()
+        controller = Controller(str(folder))
+        controller._rules = [{"id": rule_id, "enabled": True} for rule_id in ("rename_images", "rename_videos")]
+        engine = QQmlApplicationEngine()
+        engine.setInitialProperties({"controller": controller})
+        engine.load(QUrl.fromLocalFile(str(Path(__file__).resolve().parent.parent / "folderconformer/qml/SettingsDialog.qml")))
+        dialog = engine.rootObjects()[0]
+        dialog.show()
+        dialog.findChild(QObject, "settingsSearch").setProperty("text", "folder aliases")
+
+        for rule_id, key, default, value, source, excluded, destination in (
+            ("rename_images", "imageFolderAliases", "image;images;pics", " ; Snap Shots ; pictures;",
+             "SNAP SHOTS", "Pics", "photo"),
+            ("rename_videos", "videoFolderAliases", "video;videos;vids", " clips ; movie clips ;;",
+             "MOVIE CLIPS", "Vids", "video"),
+        ):
+            with self.subTest(rule=rule_id):
+                (folder / destination / "nested").mkdir(parents=True)
+                (folder / destination / "nested/existing.txt").write_text("existing")
+                (folder / excluded).mkdir()
+                controller.checkRule(rule_id)
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertEqual(controller.checkStatuses[rule_id], "BAD")
+                field = self.folder_alias_field(dialog, key)
+                self.assertTrue(field.property("visible"))
+                self.assertEqual(field.property("text"), default)
+                field.setProperty("text", value)
+                QMetaObject.invokeMethod(field, "textEdited")
+                self.assertNotIn(rule_id, controller.checkStatuses)
+                self.assertEqual(getattr(Controller(), key), value)
+                controller.checkRule(rule_id)
+                self.assertTrue(controller.process.waitForFinished(10000))
+                self.assertEqual(controller.checkStatuses[rule_id], "OK")
+                (folder / source / "nested").mkdir(parents=True)
+                (folder / source / "nested/incoming.txt").write_text("incoming")
+
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses, {"rename_images": "BAD", "rename_videos": "BAD"})
+        controller.start()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.process.exitCode(), 0)
+        for destination, source, excluded in (("photo", "SNAP SHOTS", "Pics"), ("video", "MOVIE CLIPS", "Vids")):
+            self.assertEqual((folder / destination / "nested/existing.txt").read_text(), "existing")
+            self.assertEqual((folder / destination / "nested/incoming.txt").read_text(), "incoming")
+            self.assertFalse((folder / source).exists())
+            self.assertTrue((folder / excluded).is_dir())
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses, {"rename_images": "OK", "rename_videos": "OK"})
+        controller.imageFolderAliases = ""
+        controller.videoFolderAliases = ""
+        (folder / "SNAP SHOTS").mkdir()
+        (folder / "MOVIE CLIPS").mkdir()
+        controller.checkAll()
+        self.assertTrue(controller.process.waitForFinished(10000))
+        self.assertEqual(controller.checkStatuses, {"rename_images": "OK", "rename_videos": "OK"})
+        dialog.close()
 
     def test_rename_check_buttons_match_root_names_and_configured_destinations(self):
         for rule_id, field, source_name, destination in (

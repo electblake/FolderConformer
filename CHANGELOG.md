@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added editable, semicolon-separated folder aliases under File Settings > Folders for F8 (Single images folder) and N2 (Single videos folder). Both rules use the saved lists for checks and execution and match folder names without regard to case.
+- Added `pics` and `vids` to the default image and video aliases. The rules rename or merge matching folders at the project root into the configured destinations.
+
+### Fixed
+
+- Fixed a circular width calculation in the Rules panel that triggered layout warnings during resizing.
+
 ## [0.12.5] - 2026-11-06
 
 ### Fixed

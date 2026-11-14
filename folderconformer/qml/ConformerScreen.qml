@@ -31,12 +31,12 @@ Pane {
             Layout.fillHeight: true
             Layout.preferredHeight: 800
             Layout.minimumHeight: rulesPanel.topPadding + rulesPanel.bottomPadding + rulesPanel.font.pixelSize * 3
-            contentWidth: Math.max(availableWidth, rulesPanel.implicitWidth)
+            contentWidth: rulesPanel.width
             clip: true
             contentHeight: availableHeight
             RulesPanel {
                 id: rulesPanel
-                width: settingsScroll.contentWidth
+                width: Math.max(settingsScroll.availableWidth, implicitWidth)
                 height: settingsScroll.availableHeight
                 controller: screen.controller
                 enabled: !screen.controller.running

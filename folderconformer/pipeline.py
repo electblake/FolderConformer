@@ -11,6 +11,10 @@ from folderconformer.music_model import DEFAULT_AUDIO_CLASSES
 from folderconformer.workers import DEFAULT_WORKER_THREADS, RULE_IDENTIFIERS, MusicAnalysis, report, worker_results
 
 
+DEFAULT_IMAGE_FOLDER_ALIASES = "image;images;pics"
+DEFAULT_VIDEO_FOLDER_ALIASES = "video;videos;vids"
+
+
 class MediaProbeError(ValueError):
     """The selected media stream has no usable orientation metadata."""
 
@@ -142,10 +146,15 @@ def empty_directories(folder: Path):
             yield directory
 
 
+def folder_aliases(value: str):
+    return {name.strip().casefold() for name in value.split(";") if name.strip()}
+
+
 def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
                video_extensions: str, image_extensions: str, data_folder: str, data_extensions: str, ffprobe: Path,
                landscape_folder: str, music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES,
-               empty_file_name=".forceGallery", music_threads=1, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
+               empty_file_name=".forceGallery", music_threads=1, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;",
+               *, image_folder_aliases=DEFAULT_IMAGE_FOLDER_ALIASES, video_folder_aliases=DEFAULT_VIDEO_FOLDER_ALIASES):
     allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     if rule_id == "create_empty_file":
         return "OK" if (folder / empty_file_name).is_file() else "BAD"
@@ -153,11 +162,11 @@ def check_rule(folder: Path, rule_id: str, video_folder: str, image_folder: str,
         with os.scandir(folder) as entries:
             bad = any(entry.is_file() and entry.name.casefold() not in allowed for entry in entries)
     elif rule_id in ("rename_images", "rename_videos"):
-        names = ("image", "images") if rule_id == "rename_images" else ("video", "videos")
+        names = folder_aliases(image_folder_aliases if rule_id == "rename_images" else video_folder_aliases)
         destination = image_folder if rule_id == "rename_images" else video_folder
         target = Path(folder) / destination
         with os.scandir(folder) as entries:
-            bad = not target.is_dir() or any(entry.is_dir(follow_symlinks=False) and entry.name.lower() in names
+            bad = not target.is_dir() or any(entry.is_dir(follow_symlinks=False) and entry.name.casefold() in names
                                              and str(Path(entry.path)) != str(target) for entry in entries)
     elif rule_id in ("video_extensions", "photo_extensions", "data_extensions"):
         directory, extensions = {
@@ -286,7 +295,8 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
             video_folder: str, image_folder: str, video_extensions: str, image_extensions: str,
             data_folder: str, data_extensions: str, control=None, enumerate_conflicts: bool = False,
             music_folder="with-music", audio_classes=DEFAULT_AUDIO_CLASSES, empty_file_name=".forceGallery",
-            worker_threads=DEFAULT_WORKER_THREADS, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;"):
+            worker_threads=DEFAULT_WORKER_THREADS, extension_allowed_files=".forceGallery;folder.jpg;folder.png;folder.jpeg;",
+            *, image_folder_aliases=DEFAULT_IMAGE_FOLDER_ALIASES, video_folder_aliases=DEFAULT_VIDEO_FOLDER_ALIASES):
     allowed = {name.strip().casefold() for name in extension_allowed_files.split(";") if name.strip()}
     files_processed = files_moved = folders_renamed = 0
     enabled_rules = [rule for rule in rules if rule["enabled"]]
@@ -440,11 +450,11 @@ def conform(folder: Path, rules: list[dict], landscape_folder: str, ffprobe: Pat
                 if control is not None and control.stopped:
                     break
                 continue
-            names = ("image", "images") if rule["id"] == "rename_images" else ("video", "videos")
+            names = folder_aliases(image_folder_aliases if rule["id"] == "rename_images" else video_folder_aliases)
             target = folder / (image_folder if rule["id"] == "rename_images" else video_folder)
             with os.scandir(folder) as entries:
                 sources = sorted(Path(entry.path) for entry in entries
-                                 if entry.is_dir(follow_symlinks=False) and entry.name.lower() in names
+                                 if entry.is_dir(follow_symlinks=False) and entry.name.casefold() in names
                                  and str(Path(entry.path)) != str(target))
             for index, source in enumerate(sources, 1):
                 if not os.path.lexists(target) or source == target:
